@@ -160,17 +160,8 @@ export function EntitySearch() {
     setDeepResearchProgress(null);
     setDeepResearchError(null);
 
-    // First, get basic entity info
-    const result = await searchEntity(query, false);
-    if (result) {
-      setEntity(result.entity);
-      if (result.entity.locations && result.entity.locations.length > 0) {
-        setEntityLocations(result.entity.name, result.entity.locations);
-      }
-    }
-
-    // If deep research is enabled, start the async task
     if (showDeepResearch) {
+      // Deep research mode: use DeepResearch API only
       try {
         const response = await fetch("/api/deepresearch", {
           method: "POST",
@@ -183,9 +174,28 @@ export function EntitySearch() {
           setDeepResearchError(data.error);
         } else if (data.taskId) {
           setDeepResearchTaskId(data.taskId);
+          // Set a placeholder entity while research runs
+          setEntity({
+            id: `entity_${Date.now()}`,
+            name: query,
+            type: "group",
+            description: "",
+            locations: [],
+            relatedEntities: [],
+            economicData: {},
+          });
         }
       } catch (err) {
         setDeepResearchError("Failed to start deep research");
+      }
+    } else {
+      // Quick mode: use Answer API for basic entity info
+      const result = await searchEntity(query, false);
+      if (result) {
+        setEntity(result.entity);
+        if (result.entity.locations && result.entity.locations.length > 0) {
+          setEntityLocations(result.entity.name, result.entity.locations);
+        }
       }
     }
   };
@@ -262,12 +272,12 @@ export function EntitySearch() {
 
         {/* Deep research progress */}
         {isDeepResearchLoading && (
-          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+          <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-sm">
             <div className="flex items-center gap-2 text-foreground font-medium mb-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Compiling full dossier...
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              Deep Research in Progress
             </div>
-            {deepResearchProgress && (
+            {deepResearchProgress ? (
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Step {deepResearchProgress.currentStep} of {deepResearchProgress.totalSteps}</span>
@@ -282,9 +292,14 @@ export function EntitySearch() {
                   />
                 </div>
               </div>
+            ) : (
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary/50 animate-pulse w-1/4" />
+              </div>
             )}
             <p className="text-muted-foreground text-xs mt-2">
-              Generating ~50 page report with CSV data export and PowerPoint briefing...
+              This typically takes <span className="text-foreground font-medium">5-10 minutes</span>.
+              Researching sources, generating ~50 page report with CSV export and PowerPoint briefing.
             </p>
           </div>
         )}
