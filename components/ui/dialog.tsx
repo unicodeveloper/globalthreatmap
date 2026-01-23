@@ -60,12 +60,12 @@ interface DialogHeaderProps {
 
 export function DialogHeader({ children, onClose }: DialogHeaderProps) {
   return (
-    <div className="flex items-center justify-between border-b border-border px-6 py-4">
-      <div className="flex-1">{children}</div>
+    <div className="relative flex items-center justify-center border-b border-border px-6 py-4">
+      <div className="flex-1 text-center">{children}</div>
       {onClose && (
         <button
           onClick={onClose}
-          className="ml-4 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="absolute right-4 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
           <X className="h-5 w-5" />
         </button>

@@ -2,6 +2,10 @@ import { Valyu } from "valyu-js";
 
 let valyuInstance: Valyu | null = null;
 
+const OAUTH_PROXY_URL =
+  process.env.VALYU_OAUTH_PROXY_URL ||
+  `${process.env.VALYU_APP_URL || "https://platform.valyu.ai"}/api/oauth/proxy`;
+
 function getValyuClient(): Valyu {
   if (!valyuInstance) {
     const apiKey = process.env.VALYU_API_KEY;
@@ -13,10 +17,45 @@ function getValyuClient(): Valyu {
   return valyuInstance;
 }
 
+interface ProxyResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  requiresReauth?: boolean;
+}
+
+async function callViaProxy(
+  path: string,
+  body: any,
+  accessToken: string
+): Promise<ProxyResult> {
+  try {
+    const response = await fetch(OAUTH_PROXY_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path, method: "POST", body }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, error: "Session expired", requiresReauth: true };
+      }
+      return { success: false, error: `API call failed: ${response.status}` };
+    }
+
+    const data = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
 function parsePublishedDate(dateValue: unknown): string | undefined {
   if (!dateValue) return undefined;
 
-  // Handle string dates
   if (typeof dateValue === "string") {
     const parsed = new Date(dateValue);
     if (!isNaN(parsed.getTime())) {
@@ -24,12 +63,10 @@ function parsePublishedDate(dateValue: unknown): string | undefined {
     }
   }
 
-  // Handle Date objects
   if (dateValue instanceof Date && !isNaN(dateValue.getTime())) {
     return dateValue.toISOString();
   }
 
-  // Handle Unix timestamps (seconds or milliseconds)
   if (typeof dateValue === "number") {
     const timestamp = dateValue > 1e12 ? dateValue : dateValue * 1000;
     const parsed = new Date(timestamp);
@@ -41,13 +78,60 @@ function parsePublishedDate(dateValue: unknown): string | undefined {
   return undefined;
 }
 
+interface SearchOptions {
+  maxResults?: number;
+  freshness?: "day" | "week" | "month";
+  accessToken?: string;
+}
+
 export async function searchEvents(
   query: string,
-  options?: {
-    maxResults?: number;
-    freshness?: "day" | "week" | "month";
+  options?: SearchOptions
+): Promise<{
+  results: Array<{
+    title: string;
+    url: string;
+    content: string;
+    publishedDate?: string;
+    source?: string;
+  }>;
+  requiresReauth?: boolean;
+}> {
+  const searchBody = {
+    query,
+    searchType: "news",
+    maxNumResults: options?.maxResults || 20,
+  };
+
+  if (options?.accessToken) {
+    const proxyResult = await callViaProxy("/v1/search", searchBody, options.accessToken);
+
+    if (!proxyResult.success) {
+      if (proxyResult.requiresReauth) {
+        return { results: [], requiresReauth: true };
+      }
+      throw new Error(proxyResult.error || "Search failed");
+    }
+
+    const response = proxyResult.data;
+    if (!response.results) {
+      return { results: [] };
+    }
+
+    return {
+      results: response.results.map((result: any) => {
+        const dateValue = result.date || result.publication_date;
+        return {
+          title: result.title || "Untitled",
+          url: result.url || "",
+          content: typeof result.content === "string" ? result.content : "",
+          publishedDate: parsePublishedDate(dateValue),
+          source: result.source,
+        };
+      }),
+    };
   }
-) {
+
   try {
     const valyu = getValyuClient();
     const response = await valyu.search(query, {
@@ -56,23 +140,23 @@ export async function searchEvents(
     });
 
     if (!response.results) {
-      return [];
+      return { results: [] };
     }
 
-    return response.results.map((result) => {
-      // Valyu returns both 'date' and 'publication_date' fields
-      const dateValue = result.date || result.publication_date;
-
-      return {
-        title: result.title || "Untitled",
-        url: result.url || "",
-        content: typeof result.content === "string" ? result.content : "",
-        publishedDate: parsePublishedDate(dateValue),
-        source: result.source,
-      };
-    });
+    return {
+      results: response.results.map((result) => {
+        const dateValue = result.date || result.publication_date;
+        return {
+          title: result.title || "Untitled",
+          url: result.url || "",
+          content: typeof result.content === "string" ? result.content : "",
+          publishedDate: parsePublishedDate(dateValue),
+          source: result.source,
+        };
+      }),
+    };
   } catch (error) {
-    console.error("Valyu search error:", error);
+    console.error("Search error:", error);
     throw error;
   }
 }
@@ -115,12 +199,10 @@ function classifyEntityType(name: string, content: string): EntityType {
   const lowerName = name.toLowerCase().trim();
   const lowerContent = content.toLowerCase();
 
-  // Check if it's a country
   if (COUNTRIES.has(lowerName)) {
     return "country";
   }
 
-  // Check content for country indicators
   const countryIndicators = [
     "sovereign nation", "republic of", "kingdom of", "nation state",
     "government of", "country located", "bordered by", "capital city",
@@ -128,7 +210,6 @@ function classifyEntityType(name: string, content: string): EntityType {
   ];
   const countryScore = countryIndicators.filter(ind => lowerContent.includes(ind)).length;
 
-  // Check for group/tribe indicators
   const groupIndicators = [
     "ethnic group", "tribe", "tribal", "indigenous", "clan", "community",
     "peoples", "militant group", "rebel group", "armed group", "terrorist organization",
@@ -136,7 +217,6 @@ function classifyEntityType(name: string, content: string): EntityType {
   ];
   const groupScore = groupIndicators.filter(ind => lowerContent.includes(ind)).length;
 
-  // Check for person indicators
   const personIndicators = [
     "was born", "born in", "died in", "biography", "personal life",
     "early life", "career", "married", "children", "his ", "her ",
@@ -145,7 +225,6 @@ function classifyEntityType(name: string, content: string): EntityType {
   ];
   const personScore = personIndicators.filter(ind => lowerContent.includes(ind)).length;
 
-  // Check for organization indicators
   const orgIndicators = [
     "company", "corporation", "founded in", "headquarters", "inc.", "ltd.",
     "organization", "institution", "agency", "association", "foundation",
@@ -153,7 +232,6 @@ function classifyEntityType(name: string, content: string): EntityType {
   ];
   const orgScore = orgIndicators.filter(ind => lowerContent.includes(ind)).length;
 
-  // Determine type based on highest score
   const scores = [
     { type: "country" as EntityType, score: countryScore * 2 },
     { type: "group" as EntityType, score: groupScore * 1.5 },
@@ -163,7 +241,6 @@ function classifyEntityType(name: string, content: string): EntityType {
 
   scores.sort((a, b) => b.score - a.score);
 
-  // Return the type with highest score, default to organization if no clear winner
   if (scores[0].score > 0) {
     return scores[0].type;
   }
@@ -171,7 +248,51 @@ function classifyEntityType(name: string, content: string): EntityType {
   return "organization";
 }
 
-export async function getEntityResearch(entityName: string) {
+interface EntityOptions {
+  accessToken?: string;
+}
+
+export async function getEntityResearch(entityName: string, options?: EntityOptions) {
+  const searchBody = {
+    query: `${entityName} profile background information`,
+    searchType: "all",
+    maxNumResults: 10,
+  };
+
+  if (options?.accessToken) {
+    const proxyResult = await callViaProxy("/v1/search", searchBody, options.accessToken);
+
+    if (!proxyResult.success) {
+      if (proxyResult.requiresReauth) {
+        return null;
+      }
+      throw new Error(proxyResult.error || "Entity research failed");
+    }
+
+    const response = proxyResult.data;
+    if (!response.results || response.results.length === 0) {
+      return null;
+    }
+
+    const combinedContent = response.results
+      .map((r: any) => (typeof r.content === "string" ? r.content : ""))
+      .join("\n\n");
+
+    const entityType = classifyEntityType(entityName, combinedContent);
+
+    return {
+      name: entityName,
+      description: combinedContent.slice(0, 1000),
+      type: entityType,
+      data: {
+        sources: response.results.map((r: any) => ({
+          title: r.title,
+          url: r.url,
+        })),
+      },
+    };
+  }
+
   try {
     const valyu = getValyuClient();
     const response = await valyu.search(
@@ -204,12 +325,35 @@ export async function getEntityResearch(entityName: string) {
       },
     };
   } catch (error) {
-    console.error("Valyu entity research error:", error);
+    console.error("Entity research error:", error);
     throw error;
   }
 }
 
-export async function searchEntityLocations(entityName: string) {
+export async function searchEntityLocations(entityName: string, options?: EntityOptions) {
+  const searchBody = {
+    query: `${entityName} headquarters offices locations branches worldwide operations`,
+    searchType: "all",
+    maxNumResults: 15,
+  };
+
+  if (options?.accessToken) {
+    const proxyResult = await callViaProxy("/v1/search", searchBody, options.accessToken);
+
+    if (!proxyResult.success) {
+      return "";
+    }
+
+    const response = proxyResult.data;
+    if (!response.results || response.results.length === 0) {
+      return "";
+    }
+
+    return response.results
+      .map((r: any) => (typeof r.content === "string" ? r.content : ""))
+      .join("\n\n");
+  }
+
   try {
     const valyu = getValyuClient();
     const response = await valyu.search(
@@ -221,23 +365,54 @@ export async function searchEntityLocations(entityName: string) {
     );
 
     if (!response.results || response.results.length === 0) {
-      return [];
+      return "";
     }
 
-    const combinedContent = response.results
+    return response.results
       .map((r) => (typeof r.content === "string" ? r.content : ""))
       .join("\n\n");
-
-    return combinedContent;
   } catch (error) {
-    console.error("Valyu entity locations error:", error);
+    console.error("Entity locations error:", error);
     return "";
   }
 }
 
 export async function deepResearch(
-  topic: string
+  topic: string,
+  options?: EntityOptions
 ): Promise<{ summary: string; sources: { title: string; url: string }[] }> {
+  const searchBody = {
+    query: `comprehensive analysis: ${topic}`,
+    searchType: "all",
+    maxNumResults: 30,
+  };
+
+  if (options?.accessToken) {
+    const proxyResult = await callViaProxy("/v1/search", searchBody, options.accessToken);
+
+    if (!proxyResult.success) {
+      return { summary: "Research failed. Please try again.", sources: [] };
+    }
+
+    const response = proxyResult.data;
+    if (!response.results) {
+      return { summary: "No research results found.", sources: [] };
+    }
+
+    const summary = response.results
+      .slice(0, 10)
+      .map((r: any) => (typeof r.content === "string" ? r.content : ""))
+      .join("\n\n")
+      .slice(0, 3000);
+
+    const sources = response.results.map((r: any) => ({
+      title: r.title || "Untitled",
+      url: r.url || "",
+    }));
+
+    return { summary, sources };
+  }
+
   try {
     const valyu = getValyuClient();
     const response = await valyu.search(`comprehensive analysis: ${topic}`, {
@@ -262,7 +437,7 @@ export async function deepResearch(
 
     return { summary, sources };
   } catch (error) {
-    console.error("Valyu deep research error:", error);
+    console.error("Deep research error:", error);
     throw error;
   }
 }
@@ -298,11 +473,9 @@ export async function getMilitaryBases(): Promise<MilitaryBase[]> {
   const answerData = response as AnswerResponse;
   const content = answerData.contents || "";
 
-  // Parse the response to extract base information
   const bases: MilitaryBase[] = [];
   const lines = content.split("\n");
 
-  // Known coordinates for countries with military bases (fallback)
   const countryCoordinates: Record<string, { lat: number; lng: number }> = {
     "Germany": { lat: 50.1109, lng: 8.6821 },
     "Japan": { lat: 35.6762, lng: 139.6503 },
@@ -343,16 +516,15 @@ export async function getMilitaryBases(): Promise<MilitaryBase[]> {
     "Guam": { lat: 13.4443, lng: 144.7937 },
     "Diego Garcia": { lat: -7.3195, lng: 72.4229 },
     "Honduras": { lat: 14.0723, lng: -87.1921 },
-    "Cuba": { lat: 19.9030, lng: -75.0997 }, // Guantanamo
+    "Cuba": { lat: 19.9030, lng: -75.0997 },
     "Kosovo": { lat: 42.6026, lng: 20.9030 },
     "Iraq": { lat: 33.3152, lng: 44.3661 },
     "Syria": { lat: 35.2433, lng: 38.9637 },
     "Afghanistan": { lat: 34.5553, lng: 69.2075 },
     "Iceland": { lat: 64.1466, lng: -21.9426 },
-    "Greenland": { lat: 76.5310, lng: -68.7030 }, // Thule
+    "Greenland": { lat: 76.5310, lng: -68.7030 },
   };
 
-  // Parse response and create base entries
   for (const line of lines) {
     const parts = line.split("|").map((p) => p.trim());
     if (parts.length >= 2) {
@@ -374,7 +546,6 @@ export async function getMilitaryBases(): Promise<MilitaryBase[]> {
     }
   }
 
-  // If parsing didn't work well, return default known bases
   if (bases.length < 5) {
     return [
       { country: "Germany", baseName: "Ramstein Air Base", latitude: 49.4369, longitude: 7.6003, type: "usa" },
@@ -416,17 +587,16 @@ export async function getMilitaryBases(): Promise<MilitaryBase[]> {
 }
 
 export async function getCountryConflicts(
-  country: string
+  country: string,
+  options?: EntityOptions
 ): Promise<{ past: ConflictResult; current: ConflictResult }> {
   const valyu = getValyuClient();
 
-  // Type for Valyu answer response
   type AnswerResponse = {
     contents?: string;
     search_results?: Array<{ title?: string; url?: string }>;
   };
 
-  // Fetch both past and current conflicts in parallel
   const [pastResponse, currentResponse] = await Promise.all([
     valyu.answer(
       `List all major historical wars, conflicts, and military engagements that ${country} has been involved in throughout history (excluding any ongoing conflicts). Include the dates, opposing parties, and brief outcomes for each conflict. Focus on conflicts that have ended.`,
@@ -480,7 +650,6 @@ export async function* streamCountryConflicts(
   const pastQuery = `List all major historical wars, conflicts, and military engagements that ${country} has been involved in throughout history (excluding any ongoing conflicts). Include the dates, opposing parties, and brief outcomes for each conflict. Focus on conflicts that have ended.`;
 
   try {
-    // Stream current conflicts first
     const currentStream = await valyu.answer(currentQuery, {
       excludedSources: ["wikipedia.org"],
       streaming: true,
@@ -506,7 +675,6 @@ export async function* streamCountryConflicts(
       }
     }
 
-    // Then stream past conflicts
     const pastStream = await valyu.answer(pastQuery, {
       excludedSources: ["wikipedia.org"],
       streaming: true,
