@@ -28,6 +28,7 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const clusterLayer: LayerProps = {
   id: "clusters",
   type: "circle",
+  source: "events",
   filter: ["has", "point_count"],
   paint: {
     "circle-color": [
@@ -41,20 +42,22 @@ const clusterLayer: LayerProps = {
       100,
       "#ef4444",
     ],
-    "circle-radius": ["step", ["get", "point_count"], 20, 10, 30, 30, 40, 100, 50],
+    "circle-radius": ["step", ["get", "point_count"], 12, 10, 16, 30, 20, 100, 24],
     "circle-stroke-width": 2,
     "circle-stroke-color": "#1e293b",
+    "circle-opacity": 0.85,
   },
 };
 
 const clusterCountLayer: LayerProps = {
   id: "cluster-count",
   type: "symbol",
+  source: "events",
   filter: ["has", "point_count"],
   layout: {
     "text-field": ["get", "point_count_abbreviated"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
-    "text-size": 14,
+    "text-size": 11,
   },
   paint: {
     "text-color": "#ffffff",
@@ -64,6 +67,7 @@ const clusterCountLayer: LayerProps = {
 const unclusteredPointLayer: LayerProps = {
   id: "unclustered-point",
   type: "circle",
+  source: "events",
   filter: ["!", ["has", "point_count"]],
   paint: {
     "circle-color": [
@@ -90,6 +94,7 @@ const unclusteredPointLayer: LayerProps = {
 const heatmapLayer: LayerProps = {
   id: "events-heat",
   type: "heatmap",
+  source: "events",
   maxzoom: 9,
   paint: {
     "heatmap-weight": [
@@ -127,6 +132,7 @@ const heatmapLayer: LayerProps = {
 const entityLocationLayer: LayerProps = {
   id: "entity-locations",
   type: "circle",
+  source: "entity-locations",
   paint: {
     "circle-color": "#a855f7",
     "circle-radius": 10,
@@ -138,6 +144,7 @@ const entityLocationLayer: LayerProps = {
 const entityLocationLabelLayer: LayerProps = {
   id: "entity-location-labels",
   type: "symbol",
+  source: "entity-locations",
   layout: {
     "text-field": ["get", "placeName"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
@@ -155,6 +162,7 @@ const entityLocationLabelLayer: LayerProps = {
 const militaryBaseLayer: LayerProps = {
   id: "military-bases",
   type: "symbol",
+  source: "military-bases",
   layout: {
     "icon-image": [
       "match",
@@ -196,6 +204,7 @@ const militaryBaseLayer: LayerProps = {
 const militaryBaseCircleLayer: LayerProps = {
   id: "military-bases-circle",
   type: "circle",
+  source: "military-bases",
   paint: {
     "circle-color": [
       "match",
@@ -219,6 +228,7 @@ const militaryBaseCircleLayer: LayerProps = {
 const militaryBaseLabelLayer: LayerProps = {
   id: "military-bases-labels",
   type: "symbol",
+  source: "military-bases",
   layout: {
     "text-field": ["get", "baseName"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],

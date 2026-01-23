@@ -1,5 +1,6 @@
 "use client";
 
+import { memo, useCallback } from "react";
 import type { ThreatEvent } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -41,19 +42,19 @@ interface EventCardProps {
   style?: React.CSSProperties;
 }
 
-export function EventCard({
+export const EventCard = memo(function EventCard({
   event,
   isSelected,
   onClick,
   style,
 }: EventCardProps) {
-  const { flyTo } = useMapStore();
+  const flyTo = useMapStore((state) => state.flyTo);
   const CategoryIcon = categoryIconMap[event.category] || AlertTriangle;
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     onClick();
     flyTo(event.location.longitude, event.location.latitude, 6);
-  };
+  }, [onClick, flyTo, event.location.longitude, event.location.latitude]);
 
   return (
     <Card
@@ -115,4 +116,4 @@ export function EventCard({
       </CardContent>
     </Card>
   );
-}
+});
