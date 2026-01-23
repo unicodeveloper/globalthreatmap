@@ -1,5 +1,7 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+
+const TOKEN_STORAGE_KEY = "valyu_oauth_tokens";
+const USER_STORAGE_KEY = "valyu_user";
 
 export interface User {
   id: string;
@@ -9,159 +11,156 @@ export interface User {
   email_verified?: boolean;
 }
 
+interface TokenData {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number;
+}
+
 interface AuthState {
   user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
   accessToken: string | null;
   refreshToken: string | null;
   tokenExpiresAt: number | null;
-  signIn: (user: User, tokens?: { accessToken: string; refreshToken?: string; expiresIn?: number }) => void;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  initialized: boolean;
+  signIn: (user: User, tokens: { accessToken: string; refreshToken?: string; expiresIn?: number }) => void;
   signOut: () => void;
-  checkAuthFromStorage: () => void;
+  initialize: () => void;
   getAccessToken: () => string | null;
-  setTokens: (tokens: { accessToken: string; refreshToken?: string; expiresIn?: number }) => void;
 }
 
-function loadInitialTokens() {
-  if (typeof window === "undefined") return {};
+function saveTokens(tokens: TokenData): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens));
+}
+
+function loadTokens(): TokenData | null {
+  if (typeof window === "undefined") return null;
   try {
-    const accessToken = sessionStorage.getItem("access_token");
-    const refreshToken = sessionStorage.getItem("refresh_token");
-    const expiresAt = sessionStorage.getItem("token_expires_at");
-    return {
-      accessToken,
-      refreshToken,
-      tokenExpiresAt: expiresAt ? parseInt(expiresAt, 10) : null,
-    };
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
   } catch {
-    return {};
+    return null;
   }
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set, get) => ({
+function clearTokens(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+function saveUser(user: User): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+function loadUser(): User | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem(USER_STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+function clearUser(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(USER_STORAGE_KEY);
+}
+
+export const useAuthStore = create<AuthState>()((set, get) => ({
+  user: null,
+  accessToken: null,
+  refreshToken: null,
+  tokenExpiresAt: null,
+  isAuthenticated: false,
+  isLoading: true,
+  initialized: false,
+
+  initialize: () => {
+    if (get().initialized) return;
+    set({ initialized: true });
+
+    const user = loadUser();
+    const tokens = loadTokens();
+
+    if (user && tokens) {
+      const now = Date.now();
+      if (tokens.expiresAt > now) {
+        set({
+          user,
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken || null,
+          tokenExpiresAt: tokens.expiresAt,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+        return;
+      } else {
+        clearTokens();
+        clearUser();
+      }
+    }
+
+    set({
       user: null,
-      isAuthenticated: false,
-      isLoading: false,
       accessToken: null,
       refreshToken: null,
       tokenExpiresAt: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  },
 
-      signIn: (user, tokens) => {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("user", JSON.stringify(user));
-          if (tokens?.accessToken) {
-            sessionStorage.setItem("access_token", tokens.accessToken);
-            if (tokens.refreshToken) {
-              sessionStorage.setItem("refresh_token", tokens.refreshToken);
-            }
-            if (tokens.expiresIn) {
-              const expiresAt = Date.now() + tokens.expiresIn * 1000;
-              sessionStorage.setItem("token_expires_at", expiresAt.toString());
-            }
-          }
-        }
-        set({
-          user,
-          isAuthenticated: true,
-          isLoading: false,
-          accessToken: tokens?.accessToken || null,
-          refreshToken: tokens?.refreshToken || null,
-          tokenExpiresAt: tokens?.expiresIn ? Date.now() + tokens.expiresIn * 1000 : null,
-        });
-      },
+  signIn: (user, tokens) => {
+    const expiresAt = tokens.expiresIn
+      ? Date.now() + tokens.expiresIn * 1000
+      : Date.now() + 3600 * 1000;
 
-      signOut: () => {
-        set({ isLoading: true });
+    saveUser(user);
+    saveTokens({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt,
+    });
 
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("user");
-          sessionStorage.removeItem("access_token");
-          sessionStorage.removeItem("refresh_token");
-          sessionStorage.removeItem("token_expires_at");
-        }
+    set({
+      user,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken || null,
+      tokenExpiresAt: expiresAt,
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  },
 
-        set({
-          user: null,
-          isAuthenticated: false,
-          isLoading: false,
-          accessToken: null,
-          refreshToken: null,
-          tokenExpiresAt: null,
-        });
-      },
+  signOut: () => {
+    clearUser();
+    clearTokens();
 
-      checkAuthFromStorage: () => {
-        if (typeof window === "undefined") return;
+    set({
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+  },
 
-        const storedUser = localStorage.getItem("user");
-        const initialTokens = loadInitialTokens();
+  getAccessToken: () => {
+    const state = get();
+    if (!state.accessToken) return null;
 
-        if (storedUser) {
-          try {
-            const user = JSON.parse(storedUser);
-            if (user && user.id && user.email) {
-              set({
-                user,
-                isAuthenticated: true,
-                accessToken: initialTokens.accessToken || null,
-                refreshToken: initialTokens.refreshToken || null,
-                tokenExpiresAt: initialTokens.tokenExpiresAt || null,
-              });
-              return;
-            }
-          } catch (error) {
-            console.error("Error parsing stored user:", error);
-          }
-        }
-
-        set({ user: null, isAuthenticated: false });
-      },
-
-      getAccessToken: () => {
-        const state = get();
-        if (!state.accessToken) return null;
-
-        if (state.tokenExpiresAt && Date.now() >= state.tokenExpiresAt - 30000) {
-          return null;
-        }
-
-        return state.accessToken;
-      },
-
-      setTokens: (tokens) => {
-        const expiresAt = tokens.expiresIn ? Date.now() + tokens.expiresIn * 1000 : null;
-
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem("access_token", tokens.accessToken);
-          if (tokens.refreshToken) {
-            sessionStorage.setItem("refresh_token", tokens.refreshToken);
-          }
-          if (expiresAt) {
-            sessionStorage.setItem("token_expires_at", expiresAt.toString());
-          }
-        }
-
-        set({
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken || get().refreshToken,
-          tokenExpiresAt: expiresAt,
-        });
-      },
-    }),
-    {
-      name: "globalthreatmap-auth",
-      storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        tokenExpiresAt: state.tokenExpiresAt,
-      }),
-      skipHydration: true,
+    if (state.tokenExpiresAt && Date.now() >= state.tokenExpiresAt - 30000) {
+      return null;
     }
-  )
-);
+
+    return state.accessToken;
+  },
+}));

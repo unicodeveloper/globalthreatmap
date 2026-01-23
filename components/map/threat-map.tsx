@@ -280,7 +280,7 @@ export function ThreatMap() {
     setMilitaryBasesLoading,
   } = useMapStore();
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, initialized } = useAuthStore();
   const [selectedEntityLocation, setSelectedEntityLocation] = useState<SelectedEntityLocation | null>(null);
   const [selectedMilitaryBase, setSelectedMilitaryBase] = useState<SelectedMilitaryBase | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -293,9 +293,10 @@ export function ThreatMap() {
 
   const checkLimit = useCallback(() => {
     if (!requiresAuth) return false;
+    if (!initialized) return false;
     if (isAuthenticated) return false;
     return hasReachedLimit();
-  }, [requiresAuth, isAuthenticated]);
+  }, [requiresAuth, isAuthenticated, initialized]);
 
   // Fetch military bases on mount
   useEffect(() => {
@@ -487,7 +488,7 @@ export function ThreatMap() {
             return;
           }
 
-          if (requiresAuth && !isAuthenticated) {
+          if (requiresAuth && initialized && !isAuthenticated) {
             incrementCountryClicks();
           }
 
@@ -499,7 +500,7 @@ export function ThreatMap() {
         console.error("Error reverse geocoding:", error);
       }
     },
-    [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated]
+    [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized]
   );
 
   const handleMouseEnter = useCallback(() => {

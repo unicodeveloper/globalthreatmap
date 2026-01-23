@@ -32,7 +32,7 @@ export function useEvents(options: UseEventsOptions = {}) {
     setError,
   } = useEventsStore();
 
-  const { getAccessToken, signOut, isAuthenticated } = useAuthStore();
+  const { getAccessToken, signOut, isAuthenticated, initialized } = useAuthStore();
   const [requiresSignIn, setRequiresSignIn] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -41,7 +41,7 @@ export function useEvents(options: UseEventsOptions = {}) {
   const requiresAuth = APP_MODE === "valyu";
 
   const fetchEvents = useCallback(async () => {
-    if (requiresAuth && !isAuthenticated && hasReachedLimit()) {
+    if (requiresAuth && initialized && !isAuthenticated && hasReachedLimit()) {
       setRequiresSignIn(true);
       setLoading(false);
       return;
@@ -76,7 +76,7 @@ export function useEvents(options: UseEventsOptions = {}) {
       if (!initialFetchRef.current) {
         setEvents(newEvents);
         initialFetchRef.current = true;
-        if (requiresAuth && !isAuthenticated) {
+        if (requiresAuth && initialized && !isAuthenticated) {
           incrementEventLoads();
         }
       } else {
@@ -92,25 +92,25 @@ export function useEvents(options: UseEventsOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [queries, events, setEvents, addEvents, setLoading, setError, getAccessToken, signOut, requiresAuth, isAuthenticated]);
+  }, [queries, events, setEvents, addEvents, setLoading, setError, getAccessToken, signOut, requiresAuth, isAuthenticated, initialized]);
 
   const refresh = useCallback(() => {
-    if (requiresAuth && !isAuthenticated && hasReachedLimit()) {
+    if (requiresAuth && initialized && !isAuthenticated && hasReachedLimit()) {
       setRequiresSignIn(true);
       return;
     }
-    if (requiresAuth && !isAuthenticated) {
+    if (requiresAuth && initialized && !isAuthenticated) {
       incrementEventLoads();
     }
     fetchEvents();
-  }, [fetchEvents, requiresAuth, isAuthenticated]);
+  }, [fetchEvents, requiresAuth, isAuthenticated, initialized]);
 
   useEffect(() => {
     if (!initialFetchRef.current) {
       fetchEvents();
     }
 
-    if (autoRefresh && !(requiresAuth && !isAuthenticated && hasReachedLimit())) {
+    if (autoRefresh && !(requiresAuth && initialized && !isAuthenticated && hasReachedLimit())) {
       intervalRef.current = setInterval(fetchEvents, refreshInterval);
     }
 
@@ -119,7 +119,7 @@ export function useEvents(options: UseEventsOptions = {}) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [autoRefresh, refreshInterval, fetchEvents, requiresAuth, isAuthenticated]);
+  }, [autoRefresh, refreshInterval, fetchEvents, requiresAuth, isAuthenticated, initialized]);
 
   useEffect(() => {
     if (isAuthenticated) {
