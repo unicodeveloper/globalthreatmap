@@ -15,6 +15,7 @@ import Map, {
 import { useMapStore } from "@/stores/map-store";
 import { useEventsStore } from "@/stores/events-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCascadeStore } from "@/stores/cascade-store";
 import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
 import { CountryConflictsModal } from "./country-conflicts-modal";
@@ -281,6 +282,7 @@ export function ThreatMap() {
   } = useMapStore();
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
   const { isAuthenticated, initialized } = useAuthStore();
+  const { currentAnalysis, showCascadeOverlay, selectedEffect, selectEffect } = useCascadeStore();
   const [selectedEntityLocation, setSelectedEntityLocation] = useState<SelectedEntityLocation | null>(null);
   const [selectedMilitaryBase, setSelectedMilitaryBase] = useState<SelectedMilitaryBase | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -403,6 +405,85 @@ export function ThreatMap() {
     }),
     [militaryBases]
   );
+
+  // Cascade effect visualization data
+  const cascadeData = useMemo(() => {
+    if (!currentAnalysis || !showCascadeOverlay) {
+      return { type: "FeatureCollection" as const, features: [] };
+    }
+
+    return {
+      type: "FeatureCollection" as const,
+      features: currentAnalysis.effects.map((effect) => ({
+        type: "Feature" as const,
+        properties: {
+          id: effect.id,
+          country: effect.targetCountry,
+          probability: effect.probability,
+          impactType: effect.impactType,
+          timeframe: effect.timeframeHours,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [effect.longitude, effect.latitude],
+        },
+      })),
+    };
+  }, [currentAnalysis, showCascadeOverlay]);
+
+  // Cascade source point (the event that triggered the cascade)
+  const cascadeSourceData = useMemo(() => {
+    if (!currentAnalysis || !showCascadeOverlay) {
+      return { type: "FeatureCollection" as const, features: [] };
+    }
+
+    return {
+      type: "FeatureCollection" as const,
+      features: [
+        {
+          type: "Feature" as const,
+          properties: {
+            id: "cascade-source",
+            title: currentAnalysis.sourceEvent.title,
+          },
+          geometry: {
+            type: "Point" as const,
+            coordinates: [
+              currentAnalysis.sourceEvent.location.longitude,
+              currentAnalysis.sourceEvent.location.latitude,
+            ],
+          },
+        },
+      ],
+    };
+  }, [currentAnalysis, showCascadeOverlay]);
+
+  // Lines connecting source to cascade effects
+  const cascadeLinesData = useMemo(() => {
+    if (!currentAnalysis || !showCascadeOverlay) {
+      return { type: "FeatureCollection" as const, features: [] };
+    }
+
+    const sourceCoords = [
+      currentAnalysis.sourceEvent.location.longitude,
+      currentAnalysis.sourceEvent.location.latitude,
+    ];
+
+    return {
+      type: "FeatureCollection" as const,
+      features: currentAnalysis.effects.map((effect) => ({
+        type: "Feature" as const,
+        properties: {
+          id: `line-${effect.id}`,
+          probability: effect.probability,
+        },
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [sourceCoords, [effect.longitude, effect.latitude]],
+        },
+      })),
+    };
+  }, [currentAnalysis, showCascadeOverlay]);
 
   const handleMapClick = useCallback(
     async (event: MapMouseEvent) => {
@@ -601,12 +682,8 @@ export function ThreatMap() {
         clusterRadius={50}
       >
         {showHeatmap && <Layer {...heatmapLayer} />}
-        {showClusters && (
-          <>
-            <Layer {...clusterLayer} />
-            <Layer {...clusterCountLayer} />
-          </>
-        )}
+        {showClusters && <Layer {...clusterLayer} />}
+        {showClusters && <Layer {...clusterCountLayer} />}
         <Layer {...unclusteredPointLayer} />
       </Source>
 
@@ -623,6 +700,120 @@ export function ThreatMap() {
           <Layer {...militaryBaseCircleLayer} />
           <Layer {...militaryBaseLabelLayer} />
         </Source>
+      )}
+
+      {/* Cascade Prediction Overlay */}
+      {currentAnalysis && showCascadeOverlay && (
+        <>
+          {/* Connection lines from source to affected countries */}
+          <Source id="cascade-lines" type="geojson" data={cascadeLinesData}>
+            <Layer
+              id="cascade-lines-layer"
+              type="line"
+              paint={{
+                "line-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "probability"],
+                  20, "#22c55e",
+                  50, "#eab308",
+                  70, "#f97316",
+                  90, "#ef4444",
+                ],
+                "line-width": 2,
+                "line-opacity": 0.6,
+                "line-dasharray": [2, 2],
+              }}
+            />
+          </Source>
+
+          {/* Source event marker (pulsing) */}
+          <Source id="cascade-source" type="geojson" data={cascadeSourceData}>
+            <Layer
+              id="cascade-source-pulse"
+              type="circle"
+              paint={{
+                "circle-radius": 20,
+                "circle-color": "#a855f7",
+                "circle-opacity": 0.3,
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#a855f7",
+              }}
+            />
+            <Layer
+              id="cascade-source-point"
+              type="circle"
+              paint={{
+                "circle-radius": 10,
+                "circle-color": "#a855f7",
+                "circle-stroke-width": 3,
+                "circle-stroke-color": "#ffffff",
+              }}
+            />
+          </Source>
+
+          {/* Affected countries markers */}
+          <Source id="cascade-effects" type="geojson" data={cascadeData}>
+            <Layer
+              id="cascade-effects-glow"
+              type="circle"
+              paint={{
+                "circle-radius": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "probability"],
+                  20, 15,
+                  50, 20,
+                  80, 25,
+                ],
+                "circle-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "probability"],
+                  20, "#22c55e",
+                  50, "#eab308",
+                  70, "#f97316",
+                  90, "#ef4444",
+                ],
+                "circle-opacity": 0.3,
+              }}
+            />
+            <Layer
+              id="cascade-effects-point"
+              type="circle"
+              paint={{
+                "circle-radius": 8,
+                "circle-color": [
+                  "interpolate",
+                  ["linear"],
+                  ["get", "probability"],
+                  20, "#22c55e",
+                  50, "#eab308",
+                  70, "#f97316",
+                  90, "#ef4444",
+                ],
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "#1e293b",
+              }}
+            />
+            <Layer
+              id="cascade-effects-labels"
+              type="symbol"
+              layout={{
+                "text-field": ["concat", ["get", "country"], " (", ["get", "probability"], "%)"],
+                "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+                "text-size": 11,
+                "text-offset": [0, 1.5],
+                "text-anchor": "top",
+              }}
+              paint={{
+                "text-color": "#ffffff",
+                "text-halo-color": "#1e293b",
+                "text-halo-width": 1,
+              }}
+            />
+          </Source>
+        </>
       )}
 
       {selectedEvent && (
