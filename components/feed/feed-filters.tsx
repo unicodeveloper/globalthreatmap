@@ -26,6 +26,10 @@ const CATEGORIES: EventCategory[] = [
   "health",
   "environmental",
   "military",
+  "crime",
+  "piracy",
+  "infrastructure",
+  "commodities",
 ];
 
 export function FeedFilters() {

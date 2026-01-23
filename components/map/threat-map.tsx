@@ -41,9 +41,10 @@ const clusterLayer: LayerProps = {
       100,
       "#ef4444",
     ],
-    "circle-radius": ["step", ["get", "point_count"], 20, 10, 30, 30, 40, 100, 50],
+    "circle-radius": ["step", ["get", "point_count"], 12, 10, 16, 30, 20, 100, 24],
     "circle-stroke-width": 2,
     "circle-stroke-color": "#1e293b",
+    "circle-opacity": 0.85,
   },
 };
 
@@ -54,7 +55,7 @@ const clusterCountLayer: LayerProps = {
   layout: {
     "text-field": ["get", "point_count_abbreviated"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
-    "text-size": 14,
+    "text-size": 11,
   },
   paint: {
     "text-color": "#ffffff",

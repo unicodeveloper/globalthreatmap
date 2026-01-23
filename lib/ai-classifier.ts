@@ -26,6 +26,10 @@ const EventClassificationSchema = z.object({
     "health",
     "environmental",
     "military",
+    "crime",
+    "piracy",
+    "infrastructure",
+    "commodities",
   ]).describe("The primary category of the event"),
   threatLevel: z.enum(["critical", "high", "medium", "low", "info"]).describe(
     "Severity level: critical (imminent danger, mass casualties), high (significant threat), medium (developing situation), low (minor/contained), info (routine update)"
@@ -63,9 +67,25 @@ async function classifyWithAI(
         {
           role: "system",
           content: `You are an intelligence analyst classifying global events. Analyze the headline and content to determine:
-1. Category - the type of event (conflict, protest, disaster, etc.)
+1. Category - the type of event
 2. Threat Level - severity based on potential impact and urgency
 3. Location - the primary geographic location where this is happening
+
+Categories:
+- conflict: armed conflicts, wars, military clashes
+- protest: demonstrations, civil unrest, riots
+- disaster: natural disasters, earthquakes, floods, hurricanes, wildfires
+- diplomatic: international relations, treaties, sanctions
+- economic: financial markets, trade, economic crises
+- terrorism: terror attacks, bombings, extremist violence
+- cyber: cyberattacks, data breaches, hacking
+- health: disease outbreaks, pandemics, public health emergencies
+- environmental: climate events, pollution, environmental damage
+- military: military exercises, deployments, defense activities
+- crime: murders, kidnappings, drug trafficking, shootings, organized crime
+- piracy: maritime piracy, shipping attacks, hijacking at sea
+- infrastructure: water reservoir levels, power grid, utilities, dams
+- commodities: grocery prices, food supply, commodity shortages
 
 Be precise with locations - use actual place names (cities, countries, regions).
 For threat level:

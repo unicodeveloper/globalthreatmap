@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ThreatEvent } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/utils";
-import { ExternalLink, MapPin, ArrowDownRight, ChevronUp } from "lucide-react";
+import { ExternalLink, MapPin, ChevronDown, ChevronUp } from "lucide-react";
 import { Streamdown } from "streamdown";
 
 interface EventPopupProps {
@@ -71,7 +71,7 @@ export function EventPopup({ event }: EventPopupProps) {
                 </>
               ) : (
                 <>
-                  <ArrowDownRight className="h-3 w-3" />
+                  <ChevronDown className="h-3 w-3" />
                   Expand
                 </>
               )}
