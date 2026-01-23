@@ -151,20 +151,16 @@ The play/pause button in the bottom-left corner toggles automatic map panning:
 - **Play** - Map continuously pans eastward across the globe
 - **Pause** - Stops the auto-pan animation
 
-### Intel Dossiers
+### Intel Dossiers (Deep Research)
 
-Build comprehensive intelligence dossiers on any actor:
-- Overview and description
-- Location markers on the map (headquarters, offices, operations)
-- Related data sources
+Build comprehensive intelligence dossiers on any actor using Valyu's Deep Research API. Enter any entity - nations, militias, PMCs, cartels, political figures - and receive:
 
-**Full Dossier Mode**: Enable the "Full dossier with deep research" checkbox to generate:
-- ~50 page intelligence report with sourced analysis
-- **CSV Data Export** - Structured data with locations, coordinates, key figures, events, and source URLs
-- **PowerPoint Briefing** - 8-slide executive intelligence briefing
+- **~50 Page Intelligence Report** - Extensively sourced analysis covering background, organizational structure, key figures, geographic presence, recent activities, threat assessment, and timeline of events
+- **CSV Data Export** - Structured data with locations, coordinates, key figures, related organizations, significant events with dates, and source URLs - ready for further analysis
+- **PowerPoint Briefing** - 8-slide executive intelligence briefing for presentations
 - **PDF Report** - Downloadable full report
 
-Perfect for OSINT analysts who need exportable deliverables for briefings and further analysis.
+Reports take 5-10 minutes to generate but are extremely detailed and comprehensive, pulling from hundreds of sources across the web, academic papers, and proprietary databases. Perfect for OSINT analysts, researchers, and intelligence professionals who need exportable deliverables for briefings and further analysis.
 
 ### Country Conflicts
 

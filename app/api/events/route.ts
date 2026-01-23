@@ -33,11 +33,77 @@ function cleanContent(text: string): string {
     .trim();
 }
 
+// Filter out non-news sources and generic pages
+const BLOCKED_DOMAINS = [
+  "wikipedia.org",
+  "brighteon.com",
+  "fortinet.com",
+  "cisa.gov",
+];
+
+const GENERIC_TITLE_PATTERNS = [
+  /\| topic$/i,
+  /\| homeland security$/i,
+  /\| fortinet$/i,
+  /^natural disasters$/i,
+  /^countering terrorism$/i,
+  /^maritime piracy:/i,
+  /^assessment of global/i,
+  /^recent cyber attacks in \d{4}/i,
+];
+
+// Validate location is real (not garbage text)
+function isValidLocation(location: { placeName?: string; country?: string }): boolean {
+  const name = location.placeName || location.country || "";
+  // Skip if contains non-Latin scripts that aren't common (Arabic, Chinese, etc are ok)
+  // But garbage like "گۆپاڵ" or "Routes" should be filtered
+  if (name.length < 2) return false;
+  if (name.toLowerCase() === "routes") return false;
+  if (/^[a-z\s]+$/i.test(name) && name.length < 3) return false;
+  // Check for suspiciously short or generic names
+  if (["unknown", "global", "worldwide", "n/a"].includes(name.toLowerCase())) return false;
+  return true;
+}
+
+// Threat level priority for sorting
+const THREAT_LEVEL_PRIORITY: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
 async function processSearchResults(
   results: Array<{ title: string; url: string; content: string; publishedDate?: string; source?: string }>
 ): Promise<ThreatEvent[]> {
+  // Pre-filter results before processing
+  const filteredResults = results.filter((result) => {
+    // Skip blocked domains
+    const url = result.url.toLowerCase();
+    if (BLOCKED_DOMAINS.some((domain) => url.includes(domain))) {
+      return false;
+    }
+    // Skip generic informational pages
+    const title = result.title;
+    if (GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(title))) {
+      return false;
+    }
+    return true;
+  });
+
+  // Deduplicate by URL before processing (faster than after)
+  const seenUrls = new Set<string>();
+  const uniqueResults = filteredResults.filter((result) => {
+    // Normalize URL (remove query params, trailing slashes)
+    const normalizedUrl = result.url.split("?")[0].replace(/\/$/, "").toLowerCase();
+    if (seenUrls.has(normalizedUrl)) return false;
+    seenUrls.add(normalizedUrl);
+    return true;
+  });
+
   const eventsWithLocations = await Promise.all(
-    results.map(async (result) => {
+    uniqueResults.map(async (result) => {
       const cleanedTitle = cleanContent(result.title);
       const cleanedContent = cleanContent(result.content);
       const fullText = `${cleanedTitle} ${cleanedContent}`;
@@ -46,7 +112,7 @@ async function processSearchResults(
       const classification = await classifyEvent(cleanedTitle, cleanedContent);
 
       // Skip events without valid locations
-      if (!classification.location) {
+      if (!classification.location || !isValidLocation(classification.location)) {
         return null;
       }
 
@@ -73,12 +139,19 @@ async function processSearchResults(
     (event): event is ThreatEvent => event !== null
   );
 
+  // Further deduplicate by title similarity
   const uniqueEvents = validEvents.filter(
     (event, index, self) =>
       index === self.findIndex((e) => e.title === event.title)
   );
 
+  // Sort by threat level first, then by date
   return uniqueEvents.sort((a, b) => {
+    const priorityA = THREAT_LEVEL_PRIORITY[a.threatLevel] ?? 5;
+    const priorityB = THREAT_LEVEL_PRIORITY[b.threatLevel] ?? 5;
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
     const dateA = new Date(a.timestamp).getTime();
     const dateB = new Date(b.timestamp).getTime();
     return dateB - dateA;
