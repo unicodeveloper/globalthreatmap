@@ -5,17 +5,23 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { EventFeed } from "@/components/feed/event-feed";
 import { EntitySearch } from "@/components/search/entity-search";
-import { Activity, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { CascadePanel } from "@/components/cascade";
+import { useCascadeStore } from "@/stores/cascade-store";
+import { Activity, Search, ChevronLeft, ChevronRight, Zap } from "lucide-react";
 
-type Tab = "feed" | "search";
+type Tab = "feed" | "search" | "cascade";
 
 export function Sidebar() {
   const [activeTab, setActiveTab] = useState<Tab>("feed");
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { currentAnalysis, isAnalyzing } = useCascadeStore();
+
+  const hasCascade = currentAnalysis !== null || isAnalyzing;
 
   const tabs = [
     { id: "feed" as Tab, label: "Feed", icon: Activity },
     { id: "search" as Tab, label: "Search", icon: Search },
+    { id: "cascade" as Tab, label: "Cascade", icon: Zap, active: hasCascade },
   ];
 
   return (
@@ -46,14 +52,18 @@ export function Sidebar() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex flex-1 items-center justify-center gap-2 py-3 text-sm font-medium transition-colors",
+                  "relative flex flex-1 items-center justify-center gap-1 py-3 text-xs font-medium transition-colors",
                   activeTab === tab.id
                     ? "border-b-2 border-primary text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                  tab.active && activeTab !== tab.id && "text-primary/70"
                 )}
               >
-                <tab.icon className="h-4 w-4" />
+                <tab.icon className={cn("h-4 w-4", tab.active && "animate-pulse")} />
                 {tab.label}
+                {tab.active && activeTab !== tab.id && (
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary animate-pulse" />
+                )}
               </button>
             ))}
           </div>
@@ -61,6 +71,7 @@ export function Sidebar() {
           <div className="flex-1 overflow-hidden">
             {activeTab === "feed" && <EventFeed />}
             {activeTab === "search" && <EntitySearch />}
+            {activeTab === "cascade" && <CascadePanel />}
           </div>
         </>
       )}
