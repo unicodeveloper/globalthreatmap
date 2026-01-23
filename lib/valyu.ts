@@ -330,6 +330,62 @@ export async function getEntityResearch(entityName: string, options?: EntityOpti
   }
 }
 
+interface EntityStreamChunk {
+  type: "content" | "sources" | "done" | "error";
+  content?: string;
+  sources?: Array<{ title: string; url: string }>;
+  error?: string;
+}
+
+export async function* streamEntityResearch(
+  entityName: string
+): AsyncGenerator<EntityStreamChunk> {
+  const valyu = getValyuClient();
+
+  const query = `Provide a comprehensive overview of ${entityName}. Include:
+- What/who they are and their background
+- Key facts, history, and significance
+- Notable activities, operations, or achievements
+- Current status and recent developments
+- Geographic presence and areas of operation
+
+Be thorough but concise. Focus on verified facts from reliable sources.`;
+
+  try {
+    const stream = await valyu.answer(query, {
+      excludedSources: ["wikipedia.org"],
+      streaming: true,
+    });
+
+    if (Symbol.asyncIterator in (stream as object)) {
+      for await (const chunk of stream as AsyncGenerator<{
+        type: string;
+        content?: string;
+        search_results?: Array<{ title?: string; url?: string }>;
+      }>) {
+        if (chunk.type === "content" && chunk.content) {
+          yield { type: "content", content: chunk.content };
+        } else if (chunk.type === "search_results" && chunk.search_results) {
+          yield {
+            type: "sources",
+            sources: chunk.search_results.map((s) => ({
+              title: s.title || "Source",
+              url: s.url || "",
+            })),
+          };
+        }
+      }
+    }
+
+    yield { type: "done" };
+  } catch (error) {
+    yield {
+      type: "error",
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    };
+  }
+}
+
 export async function searchEntityLocations(entityName: string, options?: EntityOptions) {
   const searchBody = {
     query: `${entityName} headquarters offices locations branches worldwide operations`,

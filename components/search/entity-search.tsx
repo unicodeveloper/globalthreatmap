@@ -71,6 +71,12 @@ export function EntitySearch() {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [showFullReport, setShowFullReport] = useState(false);
 
+  // Quick answer streaming state
+  const [quickAnswerContent, setQuickAnswerContent] = useState("");
+  const [quickAnswerSources, setQuickAnswerSources] = useState<Array<{ title: string; url: string }>>([]);
+  const [isStreamingQuickAnswer, setIsStreamingQuickAnswer] = useState(false);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
   // Deep research state
   const [deepResearchTaskId, setDeepResearchTaskId] = useState<string | null>(null);
   const [deepResearchProgress, setDeepResearchProgress] = useState<DeepResearchProgress | null>(null);
@@ -78,17 +84,20 @@ export function EntitySearch() {
   const [deepResearchError, setDeepResearchError] = useState<string | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { isLoading, error, searchEntity } = useValyuSearch();
+  const { error } = useValyuSearch();
   const { flyTo, setEntityLocations, clearEntityLocations } = useMapStore();
   const { isAuthenticated, accessToken } = useAuthStore();
 
   const requiresAuth = APP_MODE === "valyu";
 
-  // Cleanup polling on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
+      }
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
       }
     };
   }, []);
@@ -153,15 +162,31 @@ export function EntitySearch() {
       return;
     }
 
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
     // Reset state
     clearEntityLocations();
     setEntity(null);
+    setQuickAnswerContent("");
+    setQuickAnswerSources([]);
     setDeepResearchResult(null);
     setDeepResearchProgress(null);
     setDeepResearchError(null);
+    setIsStreamingQuickAnswer(true);
 
-    // Always get quick answer first
-    const quickAnswerPromise = searchEntity(query, false);
+    // Create placeholder entity
+    setEntity({
+      id: `entity_${Date.now()}`,
+      name: query,
+      type: "group",
+      description: "",
+      locations: [],
+      relatedEntities: [],
+      economicData: {},
+    });
 
     // If deep research is enabled, start it in parallel
     if (showDeepResearch) {
@@ -183,14 +208,44 @@ export function EntitySearch() {
         });
     }
 
-    // Wait for quick answer
-    const result = await quickAnswerPromise;
-    if (result) {
-      setEntity(result.entity);
-      if (result.entity.locations && result.entity.locations.length > 0) {
-        setEntityLocations(result.entity.name, result.entity.locations);
+    // Stream quick answer
+    const eventSource = new EventSource(
+      `/api/entities?name=${encodeURIComponent(query)}&stream=true`
+    );
+    eventSourceRef.current = eventSource;
+
+    eventSource.onmessage = (event) => {
+      try {
+        const chunk = JSON.parse(event.data);
+
+        switch (chunk.type) {
+          case "content":
+            setQuickAnswerContent((prev) => prev + (chunk.content || ""));
+            break;
+
+          case "sources":
+            setQuickAnswerSources(chunk.sources || []);
+            break;
+
+          case "done":
+            setIsStreamingQuickAnswer(false);
+            eventSource.close();
+            break;
+
+          case "error":
+            setIsStreamingQuickAnswer(false);
+            eventSource.close();
+            break;
+        }
+      } catch {
+        // Ignore JSON parse errors
       }
-    }
+    };
+
+    eventSource.onerror = () => {
+      setIsStreamingQuickAnswer(false);
+      eventSource.close();
+    };
   };
 
   const handleShowOnMap = () => {
@@ -213,7 +268,7 @@ export function EntitySearch() {
 
   const TypeIcon = entity ? typeIcons[entity.type] : Building2;
   const isDeepResearchLoading = !!deepResearchTaskId;
-  const anyLoading = isLoading || isDeepResearchLoading;
+  const anyLoading = isStreamingQuickAnswer || isDeepResearchLoading;
 
   // Get deliverable by type
   const getDeliverable = (type: string) => {
@@ -244,7 +299,7 @@ export function EntitySearch() {
             />
           </div>
           <Button onClick={handleSearch} disabled={anyLoading || !query.trim()}>
-            {isLoading ? (
+            {isStreamingQuickAnswer ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               "Search"
@@ -328,7 +383,7 @@ export function EntitySearch() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {entity.description && (
+              {(quickAnswerContent || isStreamingQuickAnswer) && (
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <h4 className="text-sm font-medium text-foreground">
@@ -341,7 +396,10 @@ export function EntitySearch() {
                     )}
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    <Markdown content={entity.description} />
+                    <Markdown content={quickAnswerContent} />
+                    {isStreamingQuickAnswer && (
+                      <span className="inline-block h-4 w-1 animate-pulse bg-primary ml-0.5" />
+                    )}
                   </div>
                 </div>
               )}
@@ -476,37 +534,32 @@ export function EntitySearch() {
                 </div>
               )}
 
-              {entity.economicData &&
-                Object.keys(entity.economicData).length > 0 && (
-                  <div>
-                    <h4 className="mb-2 text-sm font-medium text-foreground">
-                      Data Sources
-                    </h4>
-                    <div className="space-y-1">
-                      {(
-                        entity.economicData.sources as
-                          | { title: string; url: string }[]
-                          | undefined
-                      )?.map((source, i) => (
-                        <a
-                          key={i}
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
-                        >
-                          <Favicon url={source.url} size={16} />
-                          <span className="truncate">{source.title}</span>
-                        </a>
-                      ))}
-                    </div>
+              {quickAnswerSources.length > 0 && (
+                <div>
+                  <h4 className="mb-2 text-sm font-medium text-foreground">
+                    Sources ({quickAnswerSources.length})
+                  </h4>
+                  <div className="space-y-1">
+                    {quickAnswerSources.slice(0, 10).map((source, i) => (
+                      <a
+                        key={i}
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors"
+                      >
+                        <Favicon url={source.url} size={16} />
+                        <span className="truncate">{source.title}</span>
+                      </a>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {!entity && !isLoading && !error && (
+        {!entity && !isStreamingQuickAnswer && !error && (
           <div className="py-8 text-center">
             <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
             <p className="mt-4 text-sm text-muted-foreground">

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEntityResearch, deepResearch, searchEntityLocations } from "@/lib/valyu";
+import { getEntityResearch, deepResearch, searchEntityLocations, streamEntityResearch } from "@/lib/valyu";
 
 export const dynamic = "force-dynamic";
 import { geocodeLocationsFromText } from "@/lib/geocoding";
@@ -8,7 +8,7 @@ import type { EntityProfile, GeoLocation } from "@/types";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get("name");
-  const deep = searchParams.get("deep") === "true";
+  const stream = searchParams.get("stream") === "true";
 
   if (!name) {
     return NextResponse.json(
@@ -16,6 +16,41 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   }
+
+  // Streaming mode - use Server-Sent Events
+  if (stream) {
+    const encoder = new TextEncoder();
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of streamEntityResearch(name)) {
+            const data = `data: ${JSON.stringify(chunk)}\n\n`;
+            controller.enqueue(encoder.encode(data));
+          }
+          controller.close();
+        } catch (error) {
+          const errorData = `data: ${JSON.stringify({
+            type: "error",
+            error: error instanceof Error ? error.message : "Unknown error",
+          })}\n\n`;
+          controller.enqueue(encoder.encode(errorData));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  }
+
+  // Non-streaming mode (original logic)
+  const deep = searchParams.get("deep") === "true";
 
   try {
     const entityData = await getEntityResearch(name);
