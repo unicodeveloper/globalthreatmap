@@ -16,6 +16,11 @@ const THREAT_QUERIES = [
   "terrorism attack security",
   "cyber attack breach",
   "diplomatic summit sanctions",
+  "shipping attack piracy maritime",
+  "kidnapping cartel violence crime",
+  "infrastructure dam power grid failure",
+  "food shortage commodity crisis",
+  "missile strike airstrike bombing",
 ];
 
 // Clean boilerplate from content
