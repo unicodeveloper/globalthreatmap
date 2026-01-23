@@ -8,44 +8,11 @@ import { SignInModal } from "./sign-in-modal";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
 
-
 export function SignInPanel() {
-  const { user, isAuthenticated, isLoading, signOut, checkAuthFromStorage } =
-    useAuthStore();
+  const { user, isAuthenticated, isLoading, signOut } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showSignInModal, setShowSignInModal] = useState(false);
-  const [authMessage, setAuthMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Check for OAuth callback parameters and localStorage on mount
-  useEffect(() => {
-    // Only check auth in valyu mode
-    if (APP_MODE === "valyu") {
-      checkAuthFromStorage();
-    }
-
-    // Check URL for auth success/error
-    const params = new URLSearchParams(window.location.search);
-    const authSuccess = params.get("auth");
-    const authError = params.get("error");
-
-    if (authSuccess === "success") {
-      setAuthMessage({ type: "success", text: "Successfully signed in!" });
-      // Clean up URL
-      window.history.replaceState({}, "", window.location.pathname);
-      // Clear message after 3 seconds
-      setTimeout(() => setAuthMessage(null), 3000);
-    } else if (authError) {
-      setAuthMessage({ type: "error", text: decodeURIComponent(authError) });
-      // Clean up URL
-      window.history.replaceState({}, "", window.location.pathname);
-      // Clear message after 5 seconds
-      setTimeout(() => setAuthMessage(null), 5000);
-    }
-  }, [checkAuthFromStorage]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -69,27 +36,12 @@ export function SignInPanel() {
     }
   };
 
-  // Don't render anything in self-hosted mode
   if (APP_MODE === "self-hosted") {
     return null;
   }
 
   return (
     <>
-      {/* Auth Message Toast */}
-      {authMessage && (
-        <div
-          className={cn(
-            "fixed left-4 top-4 z-50 rounded-lg px-4 py-3 shadow-lg animate-in fade-in slide-in-from-left-2 duration-200",
-            authMessage.type === "success"
-              ? "bg-green-500 text-white"
-              : "bg-red-500 text-white"
-          )}
-        >
-          {authMessage.text}
-        </div>
-      )}
-
       <div
         className="fixed left-4 top-1/2 -translate-y-1/2 z-40"
         ref={dropdownRef}

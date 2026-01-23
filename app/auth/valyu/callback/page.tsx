@@ -2,15 +2,15 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuthStore } from "@/stores/auth-store";
 
 export const dynamic = "force-dynamic";
 
 function OAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<"processing" | "success" | "error">(
-    "processing"
-  );
+  const signIn = useAuthStore((state) => state.signIn);
+  const [status, setStatus] = useState<"processing" | "success" | "error">("processing");
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
@@ -19,7 +19,6 @@ function OAuthCallbackContent() {
       const state = searchParams.get("state");
       const error = searchParams.get("error");
 
-      // Handle OAuth errors
       if (error) {
         setStatus("error");
         setErrorMessage("Authorization failed. Please try again.");
@@ -27,7 +26,6 @@ function OAuthCallbackContent() {
         return;
       }
 
-      // Validate required parameters
       if (!code || !state) {
         setStatus("error");
         setErrorMessage("Invalid callback parameters.");
@@ -35,7 +33,6 @@ function OAuthCallbackContent() {
         return;
       }
 
-      // Validate state (CSRF protection)
       const storedState = sessionStorage.getItem("oauth_state");
       if (state !== storedState) {
         setStatus("error");
@@ -44,7 +41,6 @@ function OAuthCallbackContent() {
         return;
       }
 
-      // Get code verifier from storage
       const codeVerifier = sessionStorage.getItem("oauth_code_verifier");
       if (!codeVerifier) {
         setStatus("error");
@@ -54,16 +50,10 @@ function OAuthCallbackContent() {
       }
 
       try {
-        // Exchange authorization code for access token
         const tokenResponse = await fetch("/api/oauth/token", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            code,
-            codeVerifier,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, codeVerifier }),
         });
 
         if (!tokenResponse.ok) {
@@ -71,34 +61,38 @@ function OAuthCallbackContent() {
           throw new Error(errorData.error || "Token exchange failed");
         }
 
-        const { access_token, user } = await tokenResponse.json();
+        const { access_token, refresh_token, expires_in, user } = await tokenResponse.json();
 
-        // Store user info in localStorage
-        localStorage.setItem("valyu_user", JSON.stringify(user));
-        localStorage.setItem("valyu_access_token", access_token);
-
-        // Clean up session storage
         sessionStorage.removeItem("oauth_code_verifier");
         sessionStorage.removeItem("oauth_state");
 
-        setStatus("success");
+        signIn(
+          {
+            id: user.sub || user.id,
+            name: user.name || user.email,
+            email: user.email,
+            picture: user.picture,
+            email_verified: user.email_verified,
+          },
+          {
+            accessToken: access_token,
+            refreshToken: refresh_token,
+            expiresIn: expires_in || 3600,
+          }
+        );
 
-        // Redirect to home page
-        setTimeout(() => {
-          router.push("/?auth=success");
-        }, 1000);
+        setStatus("success");
+        setTimeout(() => router.push("/"), 1000);
       } catch (error) {
         console.error("OAuth callback error:", error);
         setStatus("error");
-        setErrorMessage(
-          error instanceof Error ? error.message : "Authentication failed"
-        );
+        setErrorMessage(error instanceof Error ? error.message : "Authentication failed");
         setTimeout(() => router.push("/"), 3000);
       }
     };
 
     handleCallback();
-  }, [searchParams, router]);
+  }, [searchParams, router, signIn]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
