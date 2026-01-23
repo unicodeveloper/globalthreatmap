@@ -28,7 +28,6 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 const clusterLayer: LayerProps = {
   id: "clusters",
   type: "circle",
-  source: "events",
   filter: ["has", "point_count"],
   paint: {
     "circle-color": [
@@ -52,7 +51,6 @@ const clusterLayer: LayerProps = {
 const clusterCountLayer: LayerProps = {
   id: "cluster-count",
   type: "symbol",
-  source: "events",
   filter: ["has", "point_count"],
   layout: {
     "text-field": ["get", "point_count_abbreviated"],
@@ -67,7 +65,6 @@ const clusterCountLayer: LayerProps = {
 const unclusteredPointLayer: LayerProps = {
   id: "unclustered-point",
   type: "circle",
-  source: "events",
   filter: ["!", ["has", "point_count"]],
   paint: {
     "circle-color": [
@@ -94,7 +91,6 @@ const unclusteredPointLayer: LayerProps = {
 const heatmapLayer: LayerProps = {
   id: "events-heat",
   type: "heatmap",
-  source: "events",
   maxzoom: 9,
   paint: {
     "heatmap-weight": [
@@ -132,7 +128,6 @@ const heatmapLayer: LayerProps = {
 const entityLocationLayer: LayerProps = {
   id: "entity-locations",
   type: "circle",
-  source: "entity-locations",
   paint: {
     "circle-color": "#a855f7",
     "circle-radius": 10,
@@ -144,7 +139,6 @@ const entityLocationLayer: LayerProps = {
 const entityLocationLabelLayer: LayerProps = {
   id: "entity-location-labels",
   type: "symbol",
-  source: "entity-locations",
   layout: {
     "text-field": ["get", "placeName"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
@@ -162,7 +156,6 @@ const entityLocationLabelLayer: LayerProps = {
 const militaryBaseLayer: LayerProps = {
   id: "military-bases",
   type: "symbol",
-  source: "military-bases",
   layout: {
     "icon-image": [
       "match",
@@ -204,7 +197,6 @@ const militaryBaseLayer: LayerProps = {
 const militaryBaseCircleLayer: LayerProps = {
   id: "military-bases-circle",
   type: "circle",
-  source: "military-bases",
   paint: {
     "circle-color": [
       "match",
@@ -228,7 +220,6 @@ const militaryBaseCircleLayer: LayerProps = {
 const militaryBaseLabelLayer: LayerProps = {
   id: "military-bases-labels",
   type: "symbol",
-  source: "military-bases",
   layout: {
     "text-field": ["get", "baseName"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
@@ -611,12 +602,8 @@ export function ThreatMap() {
         clusterRadius={50}
       >
         {showHeatmap && <Layer {...heatmapLayer} />}
-        {showClusters && (
-          <>
-            <Layer {...clusterLayer} />
-            <Layer {...clusterCountLayer} />
-          </>
-        )}
+        {showClusters && <Layer {...clusterLayer} />}
+        {showClusters && <Layer {...clusterCountLayer} />}
         <Layer {...unclusteredPointLayer} />
       </Source>
 
