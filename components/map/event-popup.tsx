@@ -3,8 +3,10 @@
 import { useState } from "react";
 import type { ThreatEvent } from "@/types";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatRelativeTime } from "@/lib/utils";
-import { ExternalLink, MapPin, ArrowDownRight, ChevronUp } from "lucide-react";
+import { useCascadeStore } from "@/stores/cascade-store";
+import { ExternalLink, MapPin, ArrowDownRight, ChevronUp, Zap, Loader2 } from "lucide-react";
 import { Streamdown } from "streamdown";
 
 interface EventPopupProps {
@@ -13,6 +15,27 @@ interface EventPopupProps {
 
 export function EventPopup({ event }: EventPopupProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { isAnalyzing, startAnalysis, setAnalysis, setError } = useCascadeStore();
+
+  const handleAnalyzeCascade = async () => {
+    startAnalysis(event);
+    try {
+      const response = await fetch("/api/cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to analyze cascade effects");
+      }
+
+      const analysis = await response.json();
+      setAnalysis(analysis);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Analysis failed");
+    }
+  };
 
   return (
     <div className={`min-w-[250px] p-2 ${isExpanded ? "max-w-[500px]" : "max-w-[300px]"}`}>
@@ -99,6 +122,29 @@ export function EventPopup({ event }: EventPopupProps) {
             {keyword}
           </Badge>
         ))}
+      </div>
+
+      {/* Cascade Analysis Button */}
+      <div className="mt-3 pt-2 border-t border-border">
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full gap-2 text-xs bg-primary/10 border-primary/30 hover:bg-primary/20 text-primary"
+          onClick={handleAnalyzeCascade}
+          disabled={isAnalyzing}
+        >
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Zap className="h-3 w-3" />
+              Analyze Cascade Effects
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );
