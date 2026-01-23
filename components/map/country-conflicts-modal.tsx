@@ -45,6 +45,10 @@ function AnswerSkeleton() {
   return (
     <div className="rounded-lg border border-border bg-card p-4">
       <div className="mb-4 flex items-center gap-2">
+        <RotateCw className="h-4 w-4 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">
+          Researching conflicts - typically under 15 seconds
+        </span>
       </div>
       <div className="space-y-3">
         <Skeleton className="h-4 w-full" />

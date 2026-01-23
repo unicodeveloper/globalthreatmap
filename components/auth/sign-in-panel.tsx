@@ -1,35 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Lock, LogOut, Loader2 } from "lucide-react";
+import { Lock, LogOut, Loader2, Globe } from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 import { SignInModal } from "./sign-in-modal";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
 
-function ValyuLogo({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-center rounded-lg bg-black",
-        className
-      )}
-    >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        className="h-6 w-6"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M12 19L5 5h14L12 19z" />
-      </svg>
-    </div>
-  );
-}
 
 export function SignInPanel() {
   const { user, isAuthenticated, isLoading, signOut, checkAuthFromStorage } =
@@ -146,12 +124,10 @@ export function SignInPanel() {
             )}
           </button>
 
-          {/* Divider */}
           <div className="mx-2 border-t border-border" />
 
-          {/* Valyu Logo */}
           <div className="flex h-14 w-14 items-center justify-center">
-            <ValyuLogo className="h-10 w-10" />
+            <Globe className="h-6 w-6 text-red-500" />
           </div>
         </div>
 
