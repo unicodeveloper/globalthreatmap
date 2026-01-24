@@ -118,9 +118,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   signIn: (user, tokens) => {
+    // Default to 7 days if no expiresIn provided
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
     const expiresAt = tokens.expiresIn
       ? Date.now() + tokens.expiresIn * 1000
-      : Date.now() + 3600 * 1000;
+      : Date.now() + SEVEN_DAYS_MS;
 
     saveUser(user);
     saveTokens({
