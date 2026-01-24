@@ -1,10 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useEventsStore } from "@/stores/events-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { EventCard } from "./event-card";
 import { FeedFilters } from "./feed-filters";
+import { SignInModal } from "@/components/auth";
 import { Loader2, Lock } from "lucide-react";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
@@ -13,6 +16,7 @@ export function EventFeed() {
   const { filteredEvents, isLoading, error, selectedEvent, selectEvent } =
     useEventsStore();
   const { isAuthenticated } = useAuthStore();
+  const [showSignInModal, setShowSignInModal] = useState(false);
 
   const requiresAuth = APP_MODE === "valyu";
   const showSignInPrompt = requiresAuth && !isAuthenticated && !isLoading && filteredEvents.length === 0;
@@ -50,9 +54,16 @@ export function EventFeed() {
             <p className="text-sm font-medium text-foreground mb-1">
               Sign in to view events
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mb-4">
               Events require authentication
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSignInModal(true)}
+            >
+              Sign in
+            </Button>
           </div>
         )}
 
@@ -76,6 +87,8 @@ export function EventFeed() {
           ))}
         </div>
       </ScrollArea>
+
+      <SignInModal open={showSignInModal} onOpenChange={setShowSignInModal} />
     </div>
   );
 }
