@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useEventsStore } from "@/stores/events-store";
 import { useAuthStore } from "@/stores/auth-store";
-import { hasReachedLimit, incrementEventLoads } from "@/lib/usage-limits";
 import type { ThreatEvent } from "@/types";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
@@ -32,7 +31,7 @@ export function useEvents(options: UseEventsOptions = {}) {
     setError,
   } = useEventsStore();
 
-  const { getAccessToken, signOut, isAuthenticated, initialized } = useAuthStore();
+  const { getAccessToken, signOut, isAuthenticated } = useAuthStore();
   const [requiresSignIn, setRequiresSignIn] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -40,8 +39,9 @@ export function useEvents(options: UseEventsOptions = {}) {
 
   const requiresAuth = APP_MODE === "valyu";
 
-  const fetchEvents = useCallback(async () => {
-    if (requiresAuth && initialized && !isAuthenticated && hasReachedLimit()) {
+  const fetchEvents = useCallback(async (isInitialLoad = false) => {
+    // After initial load, require sign-in for refreshes
+    if (requiresAuth && !isInitialLoad && !isAuthenticated) {
       setRequiresSignIn(true);
       setLoading(false);
       return;
@@ -76,9 +76,6 @@ export function useEvents(options: UseEventsOptions = {}) {
       if (!initialFetchRef.current) {
         setEvents(newEvents);
         initialFetchRef.current = true;
-        if (requiresAuth && initialized && !isAuthenticated) {
-          incrementEventLoads();
-        }
       } else {
         const existingIds = new Set(events.map((e) => e.id));
         const trulyNewEvents = newEvents.filter((e) => !existingIds.has(e.id));
@@ -92,26 +89,26 @@ export function useEvents(options: UseEventsOptions = {}) {
     } finally {
       setLoading(false);
     }
-  }, [queries, events, setEvents, addEvents, setLoading, setError, getAccessToken, signOut, requiresAuth, isAuthenticated, initialized]);
+  }, [queries, events, setEvents, addEvents, setLoading, setError, getAccessToken, signOut, requiresAuth, isAuthenticated]);
 
   const refresh = useCallback(() => {
-    if (requiresAuth && initialized && !isAuthenticated && hasReachedLimit()) {
+    // After initial load, require sign-in for refreshes
+    if (requiresAuth && !isAuthenticated) {
       setRequiresSignIn(true);
       return;
     }
-    if (requiresAuth && initialized && !isAuthenticated) {
-      incrementEventLoads();
-    }
-    fetchEvents();
-  }, [fetchEvents, requiresAuth, isAuthenticated, initialized]);
+    fetchEvents(false);
+  }, [fetchEvents, requiresAuth, isAuthenticated]);
 
   useEffect(() => {
     if (!initialFetchRef.current) {
-      fetchEvents();
+      // First load is always free
+      fetchEvents(true);
     }
 
-    if (autoRefresh && !(requiresAuth && initialized && !isAuthenticated && hasReachedLimit())) {
-      intervalRef.current = setInterval(fetchEvents, refreshInterval);
+    // Only auto-refresh if authenticated (after initial load)
+    if (autoRefresh && isAuthenticated) {
+      intervalRef.current = setInterval(() => fetchEvents(false), refreshInterval);
     }
 
     return () => {
@@ -119,7 +116,7 @@ export function useEvents(options: UseEventsOptions = {}) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [autoRefresh, refreshInterval, fetchEvents, requiresAuth, isAuthenticated, initialized]);
+  }, [autoRefresh, refreshInterval, fetchEvents, isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {

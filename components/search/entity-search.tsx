@@ -144,7 +144,8 @@ export function EntitySearch() {
   const handleSearch = async () => {
     if (!query.trim()) return;
 
-    if (requiresAuth && !isAuthenticated) {
+    // Always require sign-in for intel search
+    if (!isAuthenticated) {
       setShowSignInModal(true);
       return;
     }

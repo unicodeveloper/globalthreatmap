@@ -19,7 +19,6 @@ import { threatLevelColors } from "@/types";
 import { EventPopup } from "./event-popup";
 import { CountryConflictsModal } from "./country-conflicts-modal";
 import { SignInModal } from "@/components/auth/sign-in-modal";
-import { hasReachedLimit, incrementCountryClicks } from "@/lib/usage-limits";
 
 const APP_MODE = process.env.NEXT_PUBLIC_APP_MODE || "self-hosted";
 
@@ -281,7 +280,7 @@ export function ThreatMap() {
     setMilitaryBasesLoading,
   } = useMapStore();
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
-  const { isAuthenticated, initialized } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const [selectedEntityLocation, setSelectedEntityLocation] = useState<SelectedEntityLocation | null>(null);
   const [selectedMilitaryBase, setSelectedMilitaryBase] = useState<SelectedMilitaryBase | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -292,12 +291,6 @@ export function ThreatMap() {
 
   const requiresAuth = APP_MODE === "valyu";
 
-  const checkLimit = useCallback(() => {
-    if (!requiresAuth) return false;
-    if (!initialized) return false;
-    if (isAuthenticated) return false;
-    return hasReachedLimit();
-  }, [requiresAuth, isAuthenticated, initialized]);
 
   // Fetch military bases on mount
   useEffect(() => {
@@ -484,13 +477,10 @@ export function ThreatMap() {
           // Get ISO 3166-1 alpha-2 country code from short_code property
           const countryCode = countryFeature.properties?.short_code?.toUpperCase() || null;
 
-          if (checkLimit()) {
+          // Always require sign-in for country clicks (answers about a place)
+          if (requiresAuth && !isAuthenticated) {
             setShowSignInModal(true);
             return;
-          }
-
-          if (requiresAuth && initialized && !isAuthenticated) {
-            incrementCountryClicks();
           }
 
           setSelectedCountry(countryName);
@@ -501,7 +491,7 @@ export function ThreatMap() {
         console.error("Error reverse geocoding:", error);
       }
     },
-    [filteredEvents, selectEvent, viewport.zoom, checkLimit, requiresAuth, isAuthenticated, initialized]
+    [filteredEvents, selectEvent, viewport.zoom, requiresAuth, isAuthenticated]
   );
 
   const handleMouseEnter = useCallback(() => {
