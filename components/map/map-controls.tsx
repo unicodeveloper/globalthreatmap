@@ -1,74 +1,24 @@
 "use client";
 
 import { useMapStore } from "@/stores/map-store";
-import { Button } from "@/components/ui/button";
-import { Flame, Circle, Square, Shield } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Shield } from "lucide-react";
 
 export function MapControls() {
-  const {
-    showHeatmap,
-    showClusters,
-    showWatchboxes,
-    showMilitaryBases,
-    toggleHeatmap,
-    toggleClusters,
-    toggleWatchboxes,
-    toggleMilitaryBases,
-  } = useMapStore();
+  const { showMilitaryBases, toggleMilitaryBases } = useMapStore();
 
   return (
-    <div className="absolute bottom-20 left-6 z-10 flex flex-col gap-2">
-      <div className="flex flex-col gap-1 rounded-lg bg-card/90 p-1.5 backdrop-blur-sm border border-border">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleHeatmap}
-          className={cn(
-            "h-8 w-8",
-            showHeatmap && "bg-primary/20 text-primary"
-          )}
-          title="Toggle Heatmap"
-        >
-          <Flame className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleClusters}
-          className={cn(
-            "h-8 w-8",
-            showClusters && "bg-primary/20 text-primary"
-          )}
-          title="Toggle Clusters"
-        >
-          <Circle className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleWatchboxes}
-          className={cn(
-            "h-8 w-8",
-            showWatchboxes && "bg-primary/20 text-primary"
-          )}
-          title="Toggle Watchboxes"
-        >
-          <Square className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleMilitaryBases}
-          className={cn(
-            "h-8 w-8",
-            showMilitaryBases && "bg-primary/20 text-primary"
-          )}
-          title="Toggle Military Bases"
-        >
-          <Shield className="h-4 w-4" />
-        </Button>
-      </div>
+    <div className="absolute bottom-20 left-6 z-10">
+      <button
+        onClick={toggleMilitaryBases}
+        className={`flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all duration-200 ${
+          showMilitaryBases
+            ? "bg-primary text-primary-foreground hover:bg-primary/90"
+            : "bg-card/95 text-foreground hover:bg-card border border-border"
+        } backdrop-blur-sm`}
+        title={showMilitaryBases ? "Hide Military Bases" : "Show Military Bases"}
+      >
+        <Shield className="h-5 w-5" />
+      </button>
     </div>
   );
 }
