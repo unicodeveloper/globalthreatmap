@@ -9,6 +9,7 @@ import { TimelineScrubber } from "@/components/map/timeline-scrubber";
 import { MapControls } from "@/components/map/map-controls";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { SignInPanel } from "@/components/auth";
+import { ThreatMarketsPanel, THREAT_MARKETS_PANEL_HEIGHT } from "@/components/threat-markets-panel";
 
 const WELCOME_DISMISSED_KEY = "globalthreatmap_welcome_dismissed";
 
@@ -27,7 +28,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col" style={{ paddingBottom: THREAT_MARKETS_PANEL_HEIGHT }}>
       <Header
         onRefresh={refresh}
         isLoading={isLoading}
@@ -43,6 +44,7 @@ export default function Home() {
       </div>
       <WelcomeModal open={showWelcome} onOpenChange={setShowWelcome} />
       <SignInPanel />
+      <ThreatMarketsPanel />
     </div>
   );
 }

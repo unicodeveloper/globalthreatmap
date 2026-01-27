@@ -23,7 +23,7 @@ export function Header({ onRefresh, isLoading, onShowHelp }: HeaderProps) {
   );
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4">
+    <header className="relative flex h-14 items-center justify-between border-b border-border bg-card px-4">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <Globe className="h-6 w-6 text-primary" />
@@ -35,6 +35,18 @@ export function Header({ onRefresh, isLoading, onShowHelp }: HeaderProps) {
           <Activity className="mr-1 h-3 w-3" />
           Live
         </Badge>
+      </div>
+
+      <div className="absolute left-1/2 -translate-x-1/2 text-sm text-muted-foreground">
+        Powered by{" "}
+        <a
+          href="https://www.valyu.ai/search-api"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-bold text-white hover:underline"
+        >
+          Valyu
+        </a>
       </div>
 
       <div className="flex items-center gap-4">
