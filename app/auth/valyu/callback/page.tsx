@@ -6,6 +6,14 @@ import { useAuthStore } from "@/stores/auth-store";
 
 export const dynamic = "force-dynamic";
 
+const OAUTH_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+function clearOAuthData() {
+  localStorage.removeItem("oauth_code_verifier");
+  localStorage.removeItem("oauth_state");
+  localStorage.removeItem("oauth_timestamp");
+}
+
 function OAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -20,6 +28,7 @@ function OAuthCallbackContent() {
       const error = searchParams.get("error");
 
       if (error) {
+        clearOAuthData();
         setStatus("error");
         setErrorMessage("Authorization failed. Please try again.");
         setTimeout(() => router.push("/"), 3000);
@@ -27,22 +36,35 @@ function OAuthCallbackContent() {
       }
 
       if (!code || !state) {
+        clearOAuthData();
         setStatus("error");
         setErrorMessage("Invalid callback parameters.");
         setTimeout(() => router.push("/"), 3000);
         return;
       }
 
-      const storedState = sessionStorage.getItem("oauth_state");
+      // Check expiration
+      const timestamp = localStorage.getItem("oauth_timestamp");
+      if (!timestamp || Date.now() - parseInt(timestamp, 10) > OAUTH_EXPIRY_MS) {
+        clearOAuthData();
+        setStatus("error");
+        setErrorMessage("OAuth session expired. Please try again.");
+        setTimeout(() => router.push("/"), 3000);
+        return;
+      }
+
+      const storedState = localStorage.getItem("oauth_state");
       if (state !== storedState) {
+        clearOAuthData();
         setStatus("error");
         setErrorMessage("Invalid state parameter. Possible CSRF attack.");
         setTimeout(() => router.push("/"), 3000);
         return;
       }
 
-      const codeVerifier = sessionStorage.getItem("oauth_code_verifier");
+      const codeVerifier = localStorage.getItem("oauth_code_verifier");
       if (!codeVerifier) {
+        clearOAuthData();
         setStatus("error");
         setErrorMessage("Code verifier not found. Please try again.");
         setTimeout(() => router.push("/"), 3000);
@@ -63,8 +85,7 @@ function OAuthCallbackContent() {
 
         const { access_token, refresh_token, expires_in, user } = await tokenResponse.json();
 
-        sessionStorage.removeItem("oauth_code_verifier");
-        sessionStorage.removeItem("oauth_state");
+        clearOAuthData();
 
         signIn(
           {
@@ -84,6 +105,7 @@ function OAuthCallbackContent() {
         setStatus("success");
         setTimeout(() => router.push("/"), 1000);
       } catch (error) {
+        clearOAuthData();
         console.error("OAuth callback error:", error);
         setStatus("error");
         setErrorMessage(error instanceof Error ? error.message : "Authentication failed");

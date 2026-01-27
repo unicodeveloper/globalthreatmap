@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import type { ThreatEvent, TimeRange } from "@/types";
 
+// Threat level priority for sorting (lower = higher priority)
+const THREAT_LEVEL_PRIORITY: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+  info: 4,
+};
+
 interface EventsState {
   events: ThreatEvent[];
   filteredEvents: ThreatEvent[];
@@ -123,8 +132,14 @@ export const useEventsStore = create<EventsState>((set, get) => ({
       );
     }
 
-    // Sort by publication date (most recent first)
+    // Sort by threat level first (critical -> high -> medium -> low -> info), then by date
     filtered.sort((a, b) => {
+      const priorityA = THREAT_LEVEL_PRIORITY[a.threatLevel] ?? 5;
+      const priorityB = THREAT_LEVEL_PRIORITY[b.threatLevel] ?? 5;
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      // Within same threat level, sort by date (most recent first)
       const dateA = new Date(a.timestamp).getTime();
       const dateB = new Date(b.timestamp).getTime();
       return dateB - dateA;
