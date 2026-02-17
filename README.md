@@ -26,7 +26,7 @@ A real-time global situational awareness platform that plots security events, ge
 
 Click on any country to view detailed conflict intelligence:
 
-- **Historical Conflicts** - Wars, military engagements, and conflicts throughout history with dates, opposing parties, and outcomes
+- **Historical Conflicts** - Wars, military engagements and conflicts throughout history with dates, opposing parties, and outcomes
 - **Current Conflicts** - Ongoing wars, military tensions, border disputes, civil unrest, terrorism threats, and geopolitical tensions
 - **Tabbed Interface** - Current conflicts (red-themed) and Historical conflicts (blue-themed) displayed in separate tabs
 - **Country Highlighting** - Selected country fills with red color and blinks while loading data
