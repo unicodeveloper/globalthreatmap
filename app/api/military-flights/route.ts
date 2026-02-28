@@ -53,6 +53,14 @@ const MILITARY_ORIGIN_COUNTRIES = [
   "Saudi Arabia", "United Arab Emirates", "India", "Pakistan",
 ];
 
+// Countries where ALL flights are interesting given current tensions
+const HIGH_INTEREST_COUNTRIES = [
+  "Iran", "Israel", "Russia", "Ukraine",
+];
+
+// Standard airline callsign pattern: 2-3 letter code + digits (e.g. UAE123, PGT4MZ)
+const AIRLINE_PATTERN = /^[A-Z]{2,3}\d/;
+
 type AircraftType = "fighter" | "bomber" | "transport" | "tanker" | "awacs" | "reconnaissance" | "drone" | "helicopter" | "unknown";
 
 function classifyAircraftType(callsign: string): AircraftType {
@@ -171,7 +179,7 @@ async function fetchRegionFlights(
       // Skip aircraft without position
       if (latitude === null || longitude === null) continue;
 
-      // Classify as military
+      // Classify as military/interesting
       let confidence: "high" | "medium" | "low" = "low";
       let isMilitary = false;
 
@@ -187,23 +195,54 @@ async function fetchRegionFlights(
         confidence = "high";
       }
 
-      // Layer 3: Military country + heavy/high-performance category
+      // Layer 3: High-interest countries - all flights are noteworthy
+      if (!isMilitary && HIGH_INTEREST_COUNTRIES.includes(originCountry)) {
+        isMilitary = true;
+        confidence = callsign && !AIRLINE_PATTERN.test(callsign) ? "medium" : "low";
+      }
+
+      // Layer 4: Military country + special aircraft category
       if (!isMilitary && MILITARY_ORIGIN_COUNTRIES.includes(originCountry)) {
         if (category === 7) {
-          // High performance = likely fighter
           isMilitary = true;
           confidence = "medium";
-        } else if (category === 6 && !callsign.match(/^[A-Z]{3}\d/)) {
-          // Heavy aircraft without airline-style callsign
+        } else if (category === 6 && callsign && !AIRLINE_PATTERN.test(callsign)) {
           isMilitary = true;
           confidence = "low";
         }
       }
 
-      // Special squawk codes
+      // Layer 5: UAVs, rotorcraft, and aircraft with no callsign from military countries
+      if (!isMilitary) {
+        if (category === 14) {
+          // UAV/drone
+          isMilitary = true;
+          confidence = "high";
+        } else if (category === 8 && MILITARY_ORIGIN_COUNTRIES.includes(originCountry)) {
+          // Rotorcraft from military country
+          isMilitary = true;
+          confidence = "medium";
+        } else if (!callsign && MILITARY_ORIGIN_COUNTRIES.includes(originCountry)) {
+          // No callsign from military country = suspicious
+          isMilitary = true;
+          confidence = "low";
+        }
+      }
+
+      // Layer 6: Special squawk codes
       if (squawk === "7700" || squawk === "7600" || squawk === "7500" || squawk === "7777" || squawk === "0000") {
         isMilitary = true;
-        if (squawk === "7777") confidence = "high"; // Military intercept ops
+        if (squawk === "7777") confidence = "high";
+        else if (squawk === "7700" || squawk === "7500") confidence = "medium";
+      }
+
+      // Layer 7: Non-airline callsign from any country (catch military-style callsigns)
+      if (!isMilitary && callsign && !AIRLINE_PATTERN.test(callsign) && callsign.length >= 3) {
+        // Skip on-ground aircraft to reduce noise
+        if (!onGround) {
+          isMilitary = true;
+          confidence = "low";
+        }
       }
 
       if (!isMilitary) continue;
