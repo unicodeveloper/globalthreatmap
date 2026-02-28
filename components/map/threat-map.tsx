@@ -269,9 +269,10 @@ const militaryFlightLayer: LayerProps = {
       "interpolate",
       ["linear"],
       ["zoom"],
-      2, 0.5,
-      5, 0.7,
-      8, 1.0,
+      2, 0.45,
+      5, 0.65,
+      8, 0.85,
+      12, 1.0,
     ],
     "icon-rotate": ["get", "heading"],
     "icon-rotation-alignment": "map",
@@ -280,38 +281,14 @@ const militaryFlightLayer: LayerProps = {
     "text-field": ["get", "callsign"],
     "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
     "text-size": 10,
-    "text-offset": [0, 1.5],
+    "text-offset": [0, 1.8],
     "text-anchor": "top",
     "text-optional": true,
   },
   paint: {
-    "text-color": "#38bdf8",
-    "text-halo-color": "#0f172a",
-    "text-halo-width": 1,
-  },
-};
-
-const militaryFlightLabelLayer: LayerProps = {
-  id: "military-flights-labels",
-  type: "symbol",
-  layout: {
-    "text-field": [
-      "concat",
-      ["get", "callsign"],
-      " ",
-      ["to-string", ["get", "altitude"]],
-      "ft",
-    ],
-    "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
-    "text-size": 9,
-    "text-offset": [0, 2.2],
-    "text-anchor": "top",
-    "text-optional": true,
-  },
-  paint: {
-    "text-color": "#94a3b8",
-    "text-halo-color": "#0f172a",
-    "text-halo-width": 1,
+    "text-color": "#7dd3fc",
+    "text-halo-color": "#0c1222",
+    "text-halo-width": 1.5,
   },
 };
 
@@ -566,51 +543,89 @@ export function ThreatMap() {
     const imageData = ctx.getImageData(0, 0, size, size);
     map.addImage("fire-icon", { width: size, height: size, data: new Uint8Array(imageData.data) });
 
-    // Draw airplane icon (pointing up / north)
-    const planeSize = 32;
+    // Draw airplane icon (pointing up / north) - sleek fighter jet silhouette
+    const planeSize = 48;
     const pc = document.createElement("canvas");
     pc.width = planeSize;
     pc.height = planeSize;
     const pctx = pc.getContext("2d");
     if (pctx) {
       const cx = planeSize / 2;
-      const cy = planeSize / 2;
 
-      // Fuselage
+      // Glow effect
+      pctx.shadowColor = "#38bdf8";
+      pctx.shadowBlur = 6;
+
+      // Fuselage - sleek pointed body
       pctx.beginPath();
-      pctx.moveTo(cx, 2);
-      pctx.lineTo(cx + 3, cy + 4);
-      pctx.lineTo(cx + 2, planeSize - 4);
-      pctx.lineTo(cx, planeSize - 2);
-      pctx.lineTo(cx - 2, planeSize - 4);
-      pctx.lineTo(cx - 3, cy + 4);
+      pctx.moveTo(cx, 3);          // Nose tip
+      pctx.lineTo(cx + 2, 10);
+      pctx.lineTo(cx + 3, 20);
+      pctx.lineTo(cx + 2.5, 34);
+      pctx.lineTo(cx + 1.5, 38);
+      pctx.lineTo(cx, 40);
+      pctx.lineTo(cx - 1.5, 38);
+      pctx.lineTo(cx - 2.5, 34);
+      pctx.lineTo(cx - 3, 20);
+      pctx.lineTo(cx - 2, 10);
       pctx.closePath();
-      pctx.fillStyle = "#38bdf8";
+      const fuselageGrad = pctx.createLinearGradient(cx, 3, cx, 40);
+      fuselageGrad.addColorStop(0, "#7dd3fc");
+      fuselageGrad.addColorStop(0.3, "#38bdf8");
+      fuselageGrad.addColorStop(1, "#0284c7");
+      pctx.fillStyle = fuselageGrad;
       pctx.fill();
 
-      // Wings
+      // Wings - swept back delta
+      pctx.shadowBlur = 4;
       pctx.beginPath();
-      pctx.moveTo(cx, cy - 2);
-      pctx.lineTo(planeSize - 2, cy + 6);
-      pctx.lineTo(planeSize - 2, cy + 8);
-      pctx.lineTo(cx + 2, cy + 4);
-      pctx.lineTo(cx - 2, cy + 4);
-      pctx.lineTo(2, cy + 8);
-      pctx.lineTo(2, cy + 6);
+      pctx.moveTo(cx, 17);
+      pctx.lineTo(cx + 16, 28);
+      pctx.lineTo(cx + 15, 30);
+      pctx.lineTo(cx + 3, 25);
+      pctx.lineTo(cx - 3, 25);
+      pctx.lineTo(cx - 15, 30);
+      pctx.lineTo(cx - 16, 28);
       pctx.closePath();
-      pctx.fillStyle = "#0ea5e9";
+      const wingGrad = pctx.createLinearGradient(cx - 16, 17, cx + 16, 30);
+      wingGrad.addColorStop(0, "#0ea5e9");
+      wingGrad.addColorStop(0.5, "#38bdf8");
+      wingGrad.addColorStop(1, "#0ea5e9");
+      pctx.fillStyle = wingGrad;
       pctx.fill();
 
-      // Tail
+      // Tail fins - angled
+      pctx.shadowBlur = 3;
       pctx.beginPath();
-      pctx.moveTo(cx, planeSize - 8);
-      pctx.lineTo(cx + 6, planeSize - 3);
-      pctx.lineTo(cx + 6, planeSize - 1);
-      pctx.lineTo(cx, planeSize - 4);
-      pctx.lineTo(cx - 6, planeSize - 1);
-      pctx.lineTo(cx - 6, planeSize - 3);
+      pctx.moveTo(cx, 33);
+      pctx.lineTo(cx + 8, 40);
+      pctx.lineTo(cx + 7, 42);
+      pctx.lineTo(cx + 1.5, 38);
+      pctx.lineTo(cx - 1.5, 38);
+      pctx.lineTo(cx - 7, 42);
+      pctx.lineTo(cx - 8, 40);
       pctx.closePath();
-      pctx.fillStyle = "#0ea5e9";
+      pctx.fillStyle = "#0284c7";
+      pctx.fill();
+
+      // Cockpit highlight
+      pctx.shadowBlur = 0;
+      pctx.beginPath();
+      pctx.moveTo(cx, 6);
+      pctx.lineTo(cx + 1.2, 11);
+      pctx.lineTo(cx, 14);
+      pctx.lineTo(cx - 1.2, 11);
+      pctx.closePath();
+      pctx.fillStyle = "#bae6fd";
+      pctx.fill();
+
+      // Engine exhaust glow
+      pctx.beginPath();
+      pctx.arc(cx, 41, 2, 0, Math.PI * 2);
+      const exhaustGrad = pctx.createRadialGradient(cx, 41, 0, cx, 41, 3);
+      exhaustGrad.addColorStop(0, "rgba(125, 211, 252, 0.8)");
+      exhaustGrad.addColorStop(1, "rgba(56, 189, 248, 0)");
+      pctx.fillStyle = exhaustGrad;
       pctx.fill();
 
       const planeData = pctx.getImageData(0, 0, planeSize, planeSize);
