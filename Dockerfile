@@ -9,8 +9,11 @@ RUN git clone https://github.com/unicodeveloper/globalthreatmap.git .
 
 RUN pnpm install --frozen-lockfile || pnpm install
 
-ENV NEXT_PUBLIC_APP_MODE=self-hosted
+ARG NEXT_PUBLIC_APP_MODE
 ARG NEXT_PUBLIC_MAPBOX_TOKEN
+ARG NEXT_PUBLIC_VALYU_CLIENT_ID
+ARG NEXT_PUBLIC_VALYU_AUTH_URL
+ARG NEXT_PUBLIC_REDIRECT_URI
 
 RUN pnpm run build
 
