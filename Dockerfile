@@ -9,21 +9,14 @@ RUN git clone https://github.com/unicodeveloper/globalthreatmap.git .
 
 RUN pnpm install --frozen-lockfile || pnpm install
 
-# All env vars - Railway passes these as build args
-ARG NASA_FIRMS_API_KEY
+# Only NEXT_PUBLIC_ vars need build-time inlining (client bundle)
+# Server-side secrets (API keys etc) are injected at runtime by Railway
 ARG NEXT_PUBLIC_APP_MODE
 ARG NEXT_PUBLIC_MAPBOX_TOKEN
 ARG NEXT_PUBLIC_REDIRECT_URI
 ARG NEXT_PUBLIC_VALYU_AUTH_URL
 ARG NEXT_PUBLIC_VALYU_CLIENT_ID
-ARG OPENAI_API_KEY
-ARG OPENSKY_CLIENT_ID
-ARG OPENSKY_CLIENT_SECRET
-ARG VALYU_API_KEY
-ARG VALYU_APP_URL
-ARG VALYU_CLIENT_SECRET
 
-# NEXT_PUBLIC_ vars must be available at build time for Next.js to inline them
 ENV NEXT_PUBLIC_APP_MODE=$NEXT_PUBLIC_APP_MODE
 ENV NEXT_PUBLIC_MAPBOX_TOKEN=$NEXT_PUBLIC_MAPBOX_TOKEN
 ENV NEXT_PUBLIC_REDIRECT_URI=$NEXT_PUBLIC_REDIRECT_URI
