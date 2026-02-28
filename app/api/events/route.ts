@@ -163,11 +163,33 @@ async function processSearchResults(
     (event): event is ThreatEvent => event !== null
   );
 
-  // Further deduplicate by title similarity
-  const uniqueEvents = validEvents.filter(
-    (event, index, self) =>
-      index === self.findIndex((e) => e.title === event.title)
-  );
+  // Deduplicate by exact title AND by fuzzy similarity (same story from different sources)
+  const uniqueEvents: ThreatEvent[] = [];
+  const seenTitles = new Set<string>();
+  const seenFingerprints = new Set<string>();
+
+  for (const event of validEvents) {
+    // Exact title match
+    if (seenTitles.has(event.title)) continue;
+    seenTitles.add(event.title);
+
+    // Fuzzy fingerprint: extract key words from title, sort, join
+    const words = event.title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+      .sort()
+      .slice(0, 5)
+      .join("|");
+    const locationKey = `${event.location.country || ""}`.toLowerCase();
+    const fingerprint = `${words}::${locationKey}`;
+
+    if (seenFingerprints.has(fingerprint)) continue;
+    seenFingerprints.add(fingerprint);
+
+    uniqueEvents.push(event);
+  }
 
   // Sort by threat level first, then by date
   return uniqueEvents.sort((a, b) => {

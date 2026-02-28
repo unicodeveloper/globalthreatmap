@@ -89,6 +89,41 @@ const unclusteredPointLayer: LayerProps = {
   },
 };
 
+// Pulse ring for critical/high threat events
+const pulseRingLayer: LayerProps = {
+  id: "pulse-ring",
+  type: "circle",
+  filter: [
+    "all",
+    ["!", ["has", "point_count"]],
+    ["in", ["get", "threatLevel"], ["literal", ["critical", "high"]]],
+  ],
+  paint: {
+    "circle-color": [
+      "match",
+      ["get", "threatLevel"],
+      "critical",
+      threatLevelColors.critical,
+      "high",
+      threatLevelColors.high,
+      "#ef4444",
+    ],
+    "circle-radius": 16,
+    "circle-opacity": 0.15,
+    "circle-stroke-width": 1,
+    "circle-stroke-color": [
+      "match",
+      ["get", "threatLevel"],
+      "critical",
+      threatLevelColors.critical,
+      "high",
+      threatLevelColors.high,
+      "#ef4444",
+    ],
+    "circle-stroke-opacity": 0.3,
+  },
+};
+
 const heatmapLayer: LayerProps = {
   id: "events-heat",
   type: "heatmap",
@@ -329,6 +364,116 @@ const fireDetectionHeatLayer: LayerProps = {
   },
 };
 
+// Earthquake circle layer
+const earthquakeLayer: LayerProps = {
+  id: "earthquakes",
+  type: "circle",
+  paint: {
+    "circle-color": [
+      "interpolate",
+      ["linear"],
+      ["get", "magnitude"],
+      0, "#eab308",
+      3, "#eab308",
+      3.01, "#f97316",
+      5, "#f97316",
+      5.01, "#ef4444",
+      7, "#ef4444",
+      7.01, "#dc2626",
+    ],
+    "circle-radius": [
+      "interpolate",
+      ["linear"],
+      ["get", "magnitude"],
+      2.5, 4,
+      5, 10,
+      7, 18,
+      9, 30,
+    ],
+    "circle-stroke-width": 2,
+    "circle-stroke-color": "#1e293b",
+    "circle-opacity": 0.85,
+  },
+};
+
+// Earthquake pulse ring layer (behind main earthquake circles)
+const earthquakePulseLayer: LayerProps = {
+  id: "earthquake-pulse",
+  type: "circle",
+  paint: {
+    "circle-color": [
+      "interpolate",
+      ["linear"],
+      ["get", "magnitude"],
+      0, "#eab308",
+      3, "#eab308",
+      3.01, "#f97316",
+      5, "#f97316",
+      5.01, "#ef4444",
+      7, "#ef4444",
+      7.01, "#dc2626",
+    ],
+    "circle-radius": [
+      "interpolate",
+      ["linear"],
+      ["get", "magnitude"],
+      2.5, 8,
+      5, 20,
+      7, 36,
+      9, 60,
+    ],
+    "circle-opacity": 0.15,
+    "circle-stroke-width": 0,
+  },
+};
+
+// Earthquake label layer
+const earthquakeLabelLayer: LayerProps = {
+  id: "earthquake-labels",
+  type: "symbol",
+  layout: {
+    "text-field": ["concat", "M", ["to-string", ["get", "magnitude"]]],
+    "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+    "text-size": 10,
+    "text-offset": [0, 1.5],
+    "text-anchor": "top",
+  },
+  paint: {
+    "text-color": "#fbbf24",
+    "text-halo-color": "#0c1222",
+    "text-halo-width": 1.5,
+  },
+};
+
+// Nuclear facilities layer
+const nuclearFacilitiesLayer: LayerProps = {
+  id: "nuclear-facilities",
+  type: "symbol",
+  layout: {
+    "icon-image": "nuclear-icon",
+    "icon-size": [
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      2, 0.4,
+      5, 0.7,
+      8, 1.0,
+    ],
+    "icon-allow-overlap": true,
+    "text-field": ["get", "name"],
+    "text-font": ["DIN Pro Medium", "Arial Unicode MS Bold"],
+    "text-size": 10,
+    "text-offset": [0, 1.8],
+    "text-anchor": "top",
+    "text-optional": true,
+  },
+  paint: {
+    "text-color": "#FFD700",
+    "text-halo-color": "#0c1222",
+    "text-halo-width": 1.5,
+  },
+};
+
 function getSeverityValue(threatLevel: string): number {
   const values: Record<string, number> = {
     critical: 5,
@@ -338,6 +483,69 @@ function getSeverityValue(threatLevel: string): number {
     info: 1,
   };
   return values[threatLevel] || 2;
+}
+
+// Calculate the solar terminator polygon for day/night overlay
+function calculateNightPolygon(): GeoJSON.Feature<GeoJSON.Polygon> {
+  const now = new Date();
+  const dayOfYear = Math.floor(
+    (now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000
+  );
+  const hourUTC = now.getUTCHours() + now.getUTCMinutes() / 60;
+
+  // Sun declination (approximate)
+  const declination =
+    -23.44 * Math.cos(((360 / 365) * (dayOfYear + 10) * Math.PI) / 180);
+  const decRad = (declination * Math.PI) / 180;
+
+  // Hour angle of the sun
+  const sunLng = -(hourUTC - 12) * 15;
+
+  const coords: [number, number][] = [];
+
+  // Generate terminator line points
+  for (let lng = -180; lng <= 180; lng += 2) {
+    const lngRad = ((lng - sunLng) * Math.PI) / 180;
+    const lat =
+      (Math.atan(-Math.cos(lngRad) / Math.tan(decRad)) * 180) / Math.PI;
+    coords.push([lng, lat]);
+  }
+
+  // Determine which side is night: if sun declination > 0, night is on the south side at lng=sunLng
+  // We need to close the polygon by going around the bottom (or top)
+  const nightOnSouth = declination >= 0;
+
+  const polygon: [number, number][] = [];
+  if (nightOnSouth) {
+    // Night is below the terminator
+    polygon.push([-180, coords[0][1]]);
+    for (const c of coords) {
+      polygon.push(c);
+    }
+    polygon.push([180, coords[coords.length - 1][1]]);
+    polygon.push([180, -90]);
+    polygon.push([-180, -90]);
+    polygon.push([-180, coords[0][1]]);
+  } else {
+    // Night is above the terminator
+    polygon.push([-180, coords[0][1]]);
+    for (const c of coords) {
+      polygon.push(c);
+    }
+    polygon.push([180, coords[coords.length - 1][1]]);
+    polygon.push([180, 90]);
+    polygon.push([-180, 90]);
+    polygon.push([-180, coords[0][1]]);
+  }
+
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: {
+      type: "Polygon",
+      coordinates: [polygon],
+    },
+  };
 }
 
 interface SelectedEntityLocation {
@@ -354,6 +562,27 @@ interface SelectedMilitaryBase {
   baseName: string;
   country: string;
   type: "usa" | "nato";
+}
+
+interface SelectedEarthquake {
+  longitude: number;
+  latitude: number;
+  magnitude: number;
+  place: string;
+  depth: number;
+  time: string;
+  url: string;
+  tsunami: boolean;
+}
+
+interface SelectedNuclearFacility {
+  longitude: number;
+  latitude: number;
+  name: string;
+  country: string;
+  type: string;
+  status: string;
+  description: string;
 }
 
 export function ThreatMap() {
@@ -376,6 +605,14 @@ export function ThreatMap() {
     militaryFlights,
     setMilitaryFlights,
     setMilitaryFlightsLoading,
+    showEarthquakes,
+    earthquakes,
+    setEarthquakes,
+    setEarthquakesLoading,
+    showNuclearFacilities,
+    nuclearFacilities,
+    setNuclearFacilities,
+    setNuclearFacilitiesLoading,
   } = useMapStore();
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
   const { isAuthenticated } = useAuthStore();
@@ -405,11 +642,15 @@ export function ThreatMap() {
     confidence: string;
     region: string;
   } | null>(null);
+  const [selectedEarthquake, setSelectedEarthquake] = useState<SelectedEarthquake | null>(null);
+  const [selectedNuclearFacility, setSelectedNuclearFacility] = useState<SelectedNuclearFacility | null>(null);
+  const [eventPopupCoords, setEventPopupCoords] = useState<{ longitude: number; latitude: number } | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
   const [blinkOpacity, setBlinkOpacity] = useState(0.4);
   const [showSignInModal, setShowSignInModal] = useState(false);
+  const [nightPolygon, setNightPolygon] = useState<GeoJSON.Feature<GeoJSON.Polygon>>(() => calculateNightPolygon());
 
   const requiresAuth = APP_MODE === "valyu";
 
@@ -475,6 +716,54 @@ export function ThreatMap() {
     const interval = setInterval(fetchMilitaryFlights, 60_000);
     return () => clearInterval(interval);
   }, [setMilitaryFlights, setMilitaryFlightsLoading]);
+
+  // Fetch earthquakes on mount
+  useEffect(() => {
+    const fetchEarthquakes = async () => {
+      setEarthquakesLoading(true);
+      try {
+        const response = await fetch("/api/earthquakes");
+        const data = await response.json();
+        if (data.earthquakes) {
+          setEarthquakes(data.earthquakes);
+        }
+      } catch (error) {
+        console.error("Error fetching earthquakes:", error);
+      } finally {
+        setEarthquakesLoading(false);
+      }
+    };
+
+    fetchEarthquakes();
+  }, [setEarthquakes, setEarthquakesLoading]);
+
+  // Fetch nuclear facilities on mount
+  useEffect(() => {
+    const fetchNuclearFacilities = async () => {
+      setNuclearFacilitiesLoading(true);
+      try {
+        const response = await fetch("/api/nuclear-facilities");
+        const data = await response.json();
+        if (data.facilities) {
+          setNuclearFacilities(data.facilities);
+        }
+      } catch (error) {
+        console.error("Error fetching nuclear facilities:", error);
+      } finally {
+        setNuclearFacilitiesLoading(false);
+      }
+    };
+
+    fetchNuclearFacilities();
+  }, [setNuclearFacilities, setNuclearFacilitiesLoading]);
+
+  // Recalculate day/night terminator every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNightPolygon(calculateNightPolygon());
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Blinking effect for selected country while loading
   useEffect(() => {
@@ -631,6 +920,51 @@ export function ThreatMap() {
       const planeData = pctx.getImageData(0, 0, planeSize, planeSize);
       map.addImage("airplane-icon", { width: planeSize, height: planeSize, data: new Uint8Array(planeData.data) });
     }
+
+    // Draw nuclear/radiation icon
+    const nucSize = 40;
+    const nc = document.createElement("canvas");
+    nc.width = nucSize;
+    nc.height = nucSize;
+    const nctx = nc.getContext("2d");
+    if (nctx) {
+      const ncx = nucSize / 2;
+      const ncy = nucSize / 2;
+
+      // Glow effect
+      nctx.shadowColor = "#FFD700";
+      nctx.shadowBlur = 8;
+
+      // Draw 3 fan blade sectors (radiation trefoil)
+      const bladeRadius = 15;
+      const innerRadius = 5;
+      const bladeAngles = [
+        -Math.PI / 2,                   // top
+        -Math.PI / 2 + (2 * Math.PI / 3), // bottom-right
+        -Math.PI / 2 + (4 * Math.PI / 3), // bottom-left
+      ];
+      const sectorSpan = Math.PI / 3; // 60 degree blades
+
+      nctx.fillStyle = "#FFD700";
+
+      for (const angle of bladeAngles) {
+        nctx.beginPath();
+        nctx.arc(ncx, ncy, bladeRadius, angle - sectorSpan / 2, angle + sectorSpan / 2);
+        nctx.arc(ncx, ncy, innerRadius, angle + sectorSpan / 2, angle - sectorSpan / 2, true);
+        nctx.closePath();
+        nctx.fill();
+      }
+
+      // Center circle (black)
+      nctx.shadowBlur = 0;
+      nctx.beginPath();
+      nctx.arc(ncx, ncy, 4, 0, Math.PI * 2);
+      nctx.fillStyle = "#111";
+      nctx.fill();
+
+      const nucData = nctx.getImageData(0, 0, nucSize, nucSize);
+      map.addImage("nuclear-icon", { width: nucSize, height: nucSize, data: new Uint8Array(nucData.data) });
+    }
   }, []);
 
   const geojsonData = useMemo(
@@ -644,12 +978,12 @@ export function ThreatMap() {
           const count = coordCounts[key] || 0;
           coordCounts[key] = count + 1;
 
-          // Spread overlapping points in a spiral pattern
+          // Tiny jitter so overlapping points don't stack exactly
           let lng = event.location.longitude;
           let lat = event.location.latitude;
           if (count > 0) {
-            const angle = (count * 137.5 * Math.PI) / 180; // golden angle
-            const radius = 0.3 + count * 0.15; // degrees offset, grows outward
+            const angle = (count * 137.5 * Math.PI) / 180;
+            const radius = 0.015 + count * 0.008; // ~1-2km offset
             lng += radius * Math.cos(angle);
             lat += radius * Math.sin(angle);
           }
@@ -765,6 +1099,59 @@ export function ThreatMap() {
     [militaryFlights]
   );
 
+  const earthquakesData = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: earthquakes.map((quake) => ({
+        type: "Feature" as const,
+        properties: {
+          id: quake.id,
+          magnitude: quake.magnitude,
+          place: quake.place,
+          depth: quake.depth,
+          time: quake.time,
+          url: quake.url,
+          tsunami: quake.tsunami,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [quake.longitude, quake.latitude],
+        },
+      })),
+    }),
+    [earthquakes]
+  );
+
+  const nuclearFacilitiesData = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: nuclearFacilities.map((facility) => ({
+        type: "Feature" as const,
+        properties: {
+          id: facility.id,
+          name: facility.name,
+          country: facility.country,
+          type: facility.type,
+          status: facility.status,
+          description: facility.description,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [facility.longitude, facility.latitude],
+        },
+      })),
+    }),
+    [nuclearFacilities]
+  );
+
+  const nightOverlayData = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: [nightPolygon],
+    }),
+    [nightPolygon]
+  );
+
   const handleMapClick = useCallback(
     async (event: MapMouseEvent) => {
       // If clicking on a known feature (event, cluster, entity), handle that
@@ -793,9 +1180,13 @@ export function ThreatMap() {
           const eventId = feature.properties?.id;
           const clickedEvent = filteredEvents.find((e) => e.id === eventId);
           if (clickedEvent) {
+            const coords = (feature.geometry as GeoJSON.Point).coordinates;
+            setEventPopupCoords({ longitude: coords[0], latitude: coords[1] });
             selectEvent(clickedEvent);
             setSelectedEntityLocation(null);
             setSelectedMilitaryBase(null);
+            setSelectedEarthquake(null);
+            setSelectedNuclearFacility(null);
           }
           return;
         } else if (layerId === "entity-locations") {
@@ -809,6 +1200,8 @@ export function ThreatMap() {
           });
           selectEvent(null);
           setSelectedMilitaryBase(null);
+          setSelectedEarthquake(null);
+          setSelectedNuclearFacility(null);
           return;
         } else if (layerId === "military-bases-circle") {
           const coords = (feature.geometry as GeoJSON.Point).coordinates;
@@ -822,6 +1215,8 @@ export function ThreatMap() {
           selectEvent(null);
           setSelectedEntityLocation(null);
           setSelectedFire(null);
+          setSelectedEarthquake(null);
+          setSelectedNuclearFacility(null);
           return;
         } else if (layerId === "military-flights") {
           const coords = (feature.geometry as GeoJSON.Point).coordinates;
@@ -843,6 +1238,8 @@ export function ThreatMap() {
           setSelectedEntityLocation(null);
           setSelectedMilitaryBase(null);
           setSelectedFire(null);
+          setSelectedEarthquake(null);
+          setSelectedNuclearFacility(null);
           return;
         } else if (layerId === "fire-detections") {
           const coords = (feature.geometry as GeoJSON.Point).coordinates;
@@ -859,6 +1256,45 @@ export function ThreatMap() {
           selectEvent(null);
           setSelectedEntityLocation(null);
           setSelectedMilitaryBase(null);
+          setSelectedEarthquake(null);
+          setSelectedNuclearFacility(null);
+          return;
+        } else if (layerId === "earthquakes") {
+          const coords = (feature.geometry as GeoJSON.Point).coordinates;
+          setSelectedEarthquake({
+            longitude: coords[0],
+            latitude: coords[1],
+            magnitude: feature.properties?.magnitude || 0,
+            place: feature.properties?.place || "Unknown",
+            depth: feature.properties?.depth || 0,
+            time: feature.properties?.time || "",
+            url: feature.properties?.url || "",
+            tsunami: feature.properties?.tsunami === true || feature.properties?.tsunami === "true",
+          });
+          selectEvent(null);
+          setSelectedEntityLocation(null);
+          setSelectedMilitaryBase(null);
+          setSelectedFire(null);
+          setSelectedFlight(null);
+          setSelectedNuclearFacility(null);
+          return;
+        } else if (layerId === "nuclear-facilities") {
+          const coords = (feature.geometry as GeoJSON.Point).coordinates;
+          setSelectedNuclearFacility({
+            longitude: coords[0],
+            latitude: coords[1],
+            name: feature.properties?.name || "Unknown Facility",
+            country: feature.properties?.country || "Unknown",
+            type: feature.properties?.type || "unknown",
+            status: feature.properties?.status || "unknown",
+            description: feature.properties?.description || "",
+          });
+          selectEvent(null);
+          setSelectedEntityLocation(null);
+          setSelectedMilitaryBase(null);
+          setSelectedFire(null);
+          setSelectedFlight(null);
+          setSelectedEarthquake(null);
           return;
         }
       }
@@ -869,6 +1305,8 @@ export function ThreatMap() {
       setSelectedMilitaryBase(null);
       setSelectedFire(null);
       setSelectedFlight(null);
+      setSelectedEarthquake(null);
+      setSelectedNuclearFacility(null);
 
       const { lng, lat } = event.lngLat;
 
@@ -943,6 +1381,8 @@ export function ThreatMap() {
         "military-bases-circle",
         ...(showFireDetections ? ["fire-detections"] : []),
         ...(showMilitaryFlights ? ["military-flights"] : []),
+        ...(showEarthquakes ? ["earthquakes"] : []),
+        ...(showNuclearFacilities ? ["nuclear-facilities"] : []),
       ]}
       onClick={handleMapClick}
       onMouseEnter={handleMouseEnter}
@@ -952,6 +1392,18 @@ export function ThreatMap() {
       <NavigationControl position="top-right" />
       <GeolocateControl position="top-right" />
       <ScaleControl position="bottom-right" />
+
+      {/* Day/Night Terminator - placed below all other layers */}
+      <Source id="night-overlay" type="geojson" data={nightOverlayData}>
+        <Layer
+          id="night-overlay-fill"
+          type="fill"
+          paint={{
+            "fill-color": "rgba(0,0,0,0.25)",
+          }}
+          beforeId="waterway-label"
+        />
+      </Source>
 
       {/* Country highlight layer */}
       {selectedCountryCode && (
@@ -1008,6 +1460,7 @@ export function ThreatMap() {
         {showHeatmap && <Layer {...heatmapLayer} />}
         {showClusters && <Layer {...clusterLayer} />}
         {showClusters && <Layer {...clusterCountLayer} />}
+        <Layer {...pulseRingLayer} />
         <Layer {...unclusteredPointLayer} />
       </Source>
 
@@ -1041,12 +1494,28 @@ export function ThreatMap() {
         </Source>
       )}
 
+      {/* Earthquake Layer */}
+      {showEarthquakes && earthquakes.length > 0 && (
+        <Source id="earthquakes" type="geojson" data={earthquakesData}>
+          <Layer {...earthquakePulseLayer} />
+          <Layer {...earthquakeLayer} />
+          <Layer {...earthquakeLabelLayer} />
+        </Source>
+      )}
+
+      {/* Nuclear Facilities Layer */}
+      {showNuclearFacilities && nuclearFacilities.length > 0 && (
+        <Source id="nuclear-facilities" type="geojson" data={nuclearFacilitiesData}>
+          <Layer {...nuclearFacilitiesLayer} />
+        </Source>
+      )}
+
       {selectedEvent && (
         <Popup
-          longitude={selectedEvent.location.longitude}
-          latitude={selectedEvent.location.latitude}
+          longitude={eventPopupCoords?.longitude ?? selectedEvent.location.longitude}
+          latitude={eventPopupCoords?.latitude ?? selectedEvent.location.latitude}
           anchor="bottom"
-          onClose={() => selectEvent(null)}
+          onClose={() => { selectEvent(null); setEventPopupCoords(null); }}
           closeButton={true}
           closeOnClick={false}
           className="threat-popup"
@@ -1338,6 +1807,154 @@ export function ThreatMap() {
             </div>
             <div className="mt-2 text-[10px] text-muted-foreground/70">
               OpenSky Network ADS-B data
+            </div>
+          </div>
+        </Popup>
+      )}
+
+      {/* Earthquake Popup */}
+      {selectedEarthquake && (
+        <Popup
+          longitude={selectedEarthquake.longitude}
+          latitude={selectedEarthquake.latitude}
+          anchor="bottom"
+          onClose={() => setSelectedEarthquake(null)}
+          closeButton={true}
+          closeOnClick={false}
+          className="threat-popup"
+        >
+          <div className="min-w-[260px] overflow-hidden rounded-lg">
+            {/* Yellow header bar */}
+            <div className="bg-yellow-500/20 px-3 py-2 border-b border-yellow-500/30">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/30">
+                  <span className="text-sm font-bold text-yellow-300">
+                    M{selectedEarthquake.magnitude.toFixed(1)}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Earthquake
+                  </h3>
+                  <span className="text-xs text-yellow-400">
+                    {selectedEarthquake.place}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 space-y-2">
+              {/* Stat grid */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md bg-yellow-500/5 p-2">
+                  <div className="text-muted-foreground">Magnitude</div>
+                  <div className="font-semibold text-foreground text-sm">{selectedEarthquake.magnitude.toFixed(1)}</div>
+                </div>
+                <div className="rounded-md bg-yellow-500/5 p-2">
+                  <div className="text-muted-foreground">Depth</div>
+                  <div className="font-semibold text-foreground text-sm">{selectedEarthquake.depth.toFixed(1)} km</div>
+                </div>
+              </div>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Time</span>
+                  <span className="font-medium text-foreground">
+                    {new Date(selectedEarthquake.time).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Coordinates</span>
+                  <span className="font-medium text-foreground">
+                    {selectedEarthquake.latitude.toFixed(4)}, {selectedEarthquake.longitude.toFixed(4)}
+                  </span>
+                </div>
+                {selectedEarthquake.tsunami && (
+                  <div className="flex items-center gap-1 mt-1 rounded bg-red-500/20 px-2 py-1 text-red-400 font-semibold">
+                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Tsunami Warning
+                  </div>
+                )}
+              </div>
+              {selectedEarthquake.url && (
+                <a
+                  href={selectedEarthquake.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 block text-center text-xs text-yellow-400 hover:text-yellow-300 underline"
+                >
+                  View on USGS
+                </a>
+              )}
+              <div className="text-[10px] text-muted-foreground/70">
+                USGS Earthquake Hazards Program
+              </div>
+            </div>
+          </div>
+        </Popup>
+      )}
+
+      {/* Nuclear Facility Popup */}
+      {selectedNuclearFacility && (
+        <Popup
+          longitude={selectedNuclearFacility.longitude}
+          latitude={selectedNuclearFacility.latitude}
+          anchor="bottom"
+          onClose={() => setSelectedNuclearFacility(null)}
+          closeButton={true}
+          closeOnClick={false}
+          className="threat-popup"
+        >
+          <div className="min-w-[260px] overflow-hidden rounded-lg">
+            {/* Gold header bar */}
+            <div className="bg-yellow-600/20 px-3 py-2 border-b border-yellow-600/30">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-500/30">
+                  <span className="text-lg text-yellow-300">&#9762;</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {selectedNuclearFacility.name}
+                  </h3>
+                  <span className="text-xs text-yellow-400">
+                    Nuclear Facility
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 space-y-2">
+              {/* Stat grid */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-md bg-yellow-600/5 p-2">
+                  <div className="text-muted-foreground">Country</div>
+                  <div className="font-semibold text-foreground text-sm">{selectedNuclearFacility.country}</div>
+                </div>
+                <div className="rounded-md bg-yellow-600/5 p-2">
+                  <div className="text-muted-foreground">Type</div>
+                  <div className="font-semibold text-foreground text-sm capitalize">{selectedNuclearFacility.type.replace(/_/g, " ")}</div>
+                </div>
+              </div>
+              <div className="space-y-1 text-xs text-muted-foreground">
+                <div className="flex justify-between">
+                  <span>Status</span>
+                  <span className={`font-medium capitalize ${
+                    selectedNuclearFacility.status === "active" ? "text-green-400" :
+                    selectedNuclearFacility.status === "under_construction" ? "text-yellow-400" :
+                    selectedNuclearFacility.status === "suspected" ? "text-red-400" :
+                    "text-slate-400"
+                  }`}>
+                    {selectedNuclearFacility.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+              </div>
+              {selectedNuclearFacility.description && (
+                <p className="text-xs text-muted-foreground/90 leading-relaxed">
+                  {selectedNuclearFacility.description}
+                </p>
+              )}
+              <div className="text-[10px] text-muted-foreground/70">
+                Nuclear threat monitoring
+              </div>
             </div>
           </div>
         </Popup>

@@ -30,6 +30,31 @@ export interface MilitaryFlightMarker {
   region: string;
 }
 
+export interface EarthquakeMarker {
+  id: string;
+  magnitude: number;
+  place: string;
+  latitude: number;
+  longitude: number;
+  depth: number;
+  time: string;
+  url: string;
+  tsunami: boolean;
+  felt: number;
+  significance: number;
+}
+
+export interface NuclearFacilityMarker {
+  id: string;
+  name: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+  type: "enrichment" | "weapons" | "power" | "research" | "reprocessing" | "test_site" | "military";
+  status: "active" | "decommissioned" | "under_construction" | "suspected";
+  description: string;
+}
+
 export interface FireDetectionMarker {
   latitude: number;
   longitude: number;
@@ -60,6 +85,12 @@ interface MapState {
   showMilitaryFlights: boolean;
   militaryFlights: MilitaryFlightMarker[];
   militaryFlightsLoading: boolean;
+  showEarthquakes: boolean;
+  earthquakes: EarthquakeMarker[];
+  earthquakesLoading: boolean;
+  showNuclearFacilities: boolean;
+  nuclearFacilities: NuclearFacilityMarker[];
+  nuclearFacilitiesLoading: boolean;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -73,6 +104,12 @@ interface MapState {
   toggleMilitaryFlights: () => void;
   setMilitaryFlights: (flights: MilitaryFlightMarker[]) => void;
   setMilitaryFlightsLoading: (loading: boolean) => void;
+  toggleEarthquakes: () => void;
+  setEarthquakes: (quakes: EarthquakeMarker[]) => void;
+  setEarthquakesLoading: (loading: boolean) => void;
+  toggleNuclearFacilities: () => void;
+  setNuclearFacilities: (facilities: NuclearFacilityMarker[]) => void;
+  setNuclearFacilitiesLoading: (loading: boolean) => void;
   startDrawingWatchbox: () => void;
   stopDrawingWatchbox: () => void;
   setActiveWatchbox: (id: string | null) => void;
@@ -110,6 +147,12 @@ export const useMapStore = create<MapState>((set) => ({
   showMilitaryFlights: true,
   militaryFlights: [],
   militaryFlightsLoading: false,
+  showEarthquakes: true,
+  earthquakes: [],
+  earthquakesLoading: false,
+  showNuclearFacilities: true,
+  nuclearFacilities: [],
+  nuclearFacilitiesLoading: false,
 
   setViewport: (viewport) =>
     set((state) => ({
@@ -163,6 +206,24 @@ export const useMapStore = create<MapState>((set) => ({
   setMilitaryFlights: (flights) => set({ militaryFlights: flights }),
 
   setMilitaryFlightsLoading: (loading) => set({ militaryFlightsLoading: loading }),
+
+  toggleEarthquakes: () =>
+    set((state) => ({
+      showEarthquakes: !state.showEarthquakes,
+    })),
+
+  setEarthquakes: (quakes) => set({ earthquakes: quakes }),
+
+  setEarthquakesLoading: (loading) => set({ earthquakesLoading: loading }),
+
+  toggleNuclearFacilities: () =>
+    set((state) => ({
+      showNuclearFacilities: !state.showNuclearFacilities,
+    })),
+
+  setNuclearFacilities: (facilities) => set({ nuclearFacilities: facilities }),
+
+  setNuclearFacilitiesLoading: (loading) => set({ nuclearFacilitiesLoading: loading }),
 
   startDrawingWatchbox: () => set({ isDrawingWatchbox: true }),
 
