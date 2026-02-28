@@ -241,6 +241,62 @@ const militaryBaseLabelLayer: LayerProps = {
   },
 };
 
+const fireDetectionLayer: LayerProps = {
+  id: "fire-detections",
+  type: "symbol",
+  layout: {
+    "icon-image": "fire-icon",
+    "icon-size": [
+      "interpolate",
+      ["linear"],
+      ["get", "frp"],
+      0, 0.5,
+      10, 0.7,
+      30, 0.9,
+      100, 1.3,
+    ],
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true,
+  },
+};
+
+const fireDetectionHeatLayer: LayerProps = {
+  id: "fire-heat",
+  type: "heatmap",
+  maxzoom: 10,
+  paint: {
+    "heatmap-weight": [
+      "interpolate",
+      ["linear"],
+      ["get", "frp"],
+      0,
+      0.1,
+      50,
+      1,
+    ],
+    "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 10, 2],
+    "heatmap-color": [
+      "interpolate",
+      ["linear"],
+      ["heatmap-density"],
+      0,
+      "rgba(0, 0, 0, 0)",
+      0.2,
+      "rgba(255, 140, 0, 0.3)",
+      0.4,
+      "rgba(255, 100, 0, 0.5)",
+      0.6,
+      "rgba(255, 69, 0, 0.6)",
+      0.8,
+      "rgba(255, 30, 0, 0.7)",
+      1,
+      "rgba(255, 0, 0, 0.8)",
+    ],
+    "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 4, 10, 20],
+    "heatmap-opacity": 0.7,
+  },
+};
+
 function getSeverityValue(threatLevel: string): number {
   const values: Record<string, number> = {
     critical: 5,
@@ -280,11 +336,25 @@ export function ThreatMap() {
     militaryBases,
     setMilitaryBases,
     setMilitaryBasesLoading,
+    showFireDetections,
+    fireDetections,
+    setFireDetections,
+    setFireDetectionsLoading,
   } = useMapStore();
   const { filteredEvents, selectedEvent, selectEvent } = useEventsStore();
   const { isAuthenticated } = useAuthStore();
   const [selectedEntityLocation, setSelectedEntityLocation] = useState<SelectedEntityLocation | null>(null);
   const [selectedMilitaryBase, setSelectedMilitaryBase] = useState<SelectedMilitaryBase | null>(null);
+  const [selectedFire, setSelectedFire] = useState<{
+    longitude: number;
+    latitude: number;
+    brightness: number;
+    frp: number;
+    confidence: string;
+    region: string;
+    acqDate: string;
+    acqTime: string;
+  } | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [isCountryLoading, setIsCountryLoading] = useState(false);
@@ -314,6 +384,26 @@ export function ThreatMap() {
     fetchMilitaryBases();
   }, [setMilitaryBases, setMilitaryBasesLoading]);
 
+  // Fetch fire detections on mount
+  useEffect(() => {
+    const fetchFireDetections = async () => {
+      setFireDetectionsLoading(true);
+      try {
+        const response = await fetch("/api/fire-detections");
+        const data = await response.json();
+        if (data.fires) {
+          setFireDetections(data.fires);
+        }
+      } catch (error) {
+        console.error("Error fetching fire detections:", error);
+      } finally {
+        setFireDetectionsLoading(false);
+      }
+    };
+
+    fetchFireDetections();
+  }, [setFireDetections, setFireDetectionsLoading]);
+
   // Blinking effect for selected country while loading
   useEffect(() => {
     if (!selectedCountryCode || !isCountryLoading) {
@@ -336,6 +426,50 @@ export function ThreatMap() {
     setSelectedCountry(null);
     setSelectedCountryCode(null);
     setIsCountryLoading(false);
+  }, []);
+
+  const handleMapLoad = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const size = 36;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Outer flame
+    ctx.beginPath();
+    ctx.moveTo(18, 2);
+    ctx.bezierCurveTo(18, 2, 26, 12, 27, 18);
+    ctx.bezierCurveTo(28, 24, 25, 30, 18, 32);
+    ctx.bezierCurveTo(11, 30, 8, 24, 9, 18);
+    ctx.bezierCurveTo(10, 12, 18, 2, 18, 2);
+    ctx.closePath();
+    const outerGrad = ctx.createLinearGradient(18, 2, 18, 32);
+    outerGrad.addColorStop(0, "#ff4500");
+    outerGrad.addColorStop(0.6, "#ff6a00");
+    outerGrad.addColorStop(1, "#ff8c00");
+    ctx.fillStyle = outerGrad;
+    ctx.fill();
+
+    // Inner flame
+    ctx.beginPath();
+    ctx.moveTo(18, 12);
+    ctx.bezierCurveTo(18, 12, 22, 18, 22, 22);
+    ctx.bezierCurveTo(22, 26, 20, 28, 18, 28);
+    ctx.bezierCurveTo(16, 28, 14, 26, 14, 22);
+    ctx.bezierCurveTo(14, 18, 18, 12, 18, 12);
+    ctx.closePath();
+    const innerGrad = ctx.createLinearGradient(18, 12, 18, 28);
+    innerGrad.addColorStop(0, "#ffcc00");
+    innerGrad.addColorStop(1, "#ffee88");
+    ctx.fillStyle = innerGrad;
+    ctx.fill();
+
+    const imageData = ctx.getImageData(0, 0, size, size);
+    map.addImage("fire-icon", { width: size, height: size, data: new Uint8Array(imageData.data) });
   }, []);
 
   const geojsonData = useMemo(
@@ -420,6 +554,29 @@ export function ThreatMap() {
     [militaryBases]
   );
 
+  const fireDetectionsData = useMemo(
+    () => ({
+      type: "FeatureCollection" as const,
+      features: fireDetections.map((fire, index) => ({
+        type: "Feature" as const,
+        properties: {
+          id: `fire-${index}`,
+          brightness: fire.brightness,
+          frp: fire.frp,
+          confidence: fire.confidence,
+          region: fire.region,
+          acqDate: fire.acqDate,
+          acqTime: fire.acqTime,
+        },
+        geometry: {
+          type: "Point" as const,
+          coordinates: [fire.longitude, fire.latitude],
+        },
+      })),
+    }),
+    [fireDetections]
+  );
+
   const handleMapClick = useCallback(
     async (event: MapMouseEvent) => {
       // If clicking on a known feature (event, cluster, entity), handle that
@@ -476,6 +633,23 @@ export function ThreatMap() {
           });
           selectEvent(null);
           setSelectedEntityLocation(null);
+          setSelectedFire(null);
+          return;
+        } else if (layerId === "fire-detections") {
+          const coords = (feature.geometry as GeoJSON.Point).coordinates;
+          setSelectedFire({
+            longitude: coords[0],
+            latitude: coords[1],
+            brightness: feature.properties?.brightness || 0,
+            frp: feature.properties?.frp || 0,
+            confidence: feature.properties?.confidence || "unknown",
+            region: feature.properties?.region || "Unknown",
+            acqDate: feature.properties?.acqDate || "",
+            acqTime: feature.properties?.acqTime || "",
+          });
+          selectEvent(null);
+          setSelectedEntityLocation(null);
+          setSelectedMilitaryBase(null);
           return;
         }
       }
@@ -484,6 +658,7 @@ export function ThreatMap() {
       selectEvent(null);
       setSelectedEntityLocation(null);
       setSelectedMilitaryBase(null);
+      setSelectedFire(null);
 
       const { lng, lat } = event.lngLat;
 
@@ -548,13 +723,16 @@ export function ThreatMap() {
       ref={mapRef}
       {...viewport}
       onMove={(evt) => setViewport(evt.viewState)}
+      onLoad={handleMapLoad}
       mapStyle="mapbox://styles/mapbox/dark-v11"
       mapboxAccessToken={MAPBOX_TOKEN}
-      interactiveLayerIds={
-        showClusters
-          ? ["clusters", "unclustered-point", "entity-locations", "military-bases-circle"]
-          : ["unclustered-point", "entity-locations", "military-bases-circle"]
-      }
+      interactiveLayerIds={[
+        ...(showClusters ? ["clusters"] : []),
+        "unclustered-point",
+        "entity-locations",
+        "military-bases-circle",
+        ...(showFireDetections ? ["fire-detections"] : []),
+      ]}
       onClick={handleMapClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -634,6 +812,14 @@ export function ThreatMap() {
         <Source id="military-bases" type="geojson" data={militaryBasesData}>
           <Layer {...militaryBaseCircleLayer} />
           <Layer {...militaryBaseLabelLayer} />
+        </Source>
+      )}
+
+      {/* Fire Detections Layer (NASA FIRMS) */}
+      {showFireDetections && fireDetections.length > 0 && (
+        <Source id="fire-detections" type="geojson" data={fireDetectionsData}>
+          <Layer {...fireDetectionHeatLayer} />
+          <Layer {...fireDetectionLayer} />
         </Source>
       )}
 
@@ -801,6 +987,60 @@ export function ThreatMap() {
                 </svg>
                 <span>{selectedMilitaryBase.country}</span>
               </div>
+            </div>
+          </div>
+        </Popup>
+      )}
+
+      {selectedFire && (
+        <Popup
+          longitude={selectedFire.longitude}
+          latitude={selectedFire.latitude}
+          anchor="bottom"
+          onClose={() => setSelectedFire(null)}
+          closeButton={true}
+          closeOnClick={false}
+          className="threat-popup"
+        >
+          <div className="min-w-[200px] p-2">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500/20">
+                <svg className="h-4 w-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">
+                  Fire Detection
+                </h3>
+                <span className={`text-xs ${
+                  selectedFire.confidence === "high" ? "text-red-400" : "text-orange-400"
+                }`}>
+                  {selectedFire.confidence} confidence - {selectedFire.region}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Fire Radiative Power</span>
+                <span className="font-medium text-foreground">{selectedFire.frp.toFixed(1)} MW</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Brightness</span>
+                <span className="font-medium text-foreground">{selectedFire.brightness.toFixed(1)} K</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Detected</span>
+                <span className="font-medium text-foreground">{selectedFire.acqDate} {selectedFire.acqTime}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Coordinates</span>
+                <span className="font-medium text-foreground">{selectedFire.latitude.toFixed(4)}, {selectedFire.longitude.toFixed(4)}</span>
+              </div>
+            </div>
+            <div className="mt-2 text-[10px] text-muted-foreground/70">
+              NASA FIRMS VIIRS satellite data
             </div>
           </div>
         </Popup>

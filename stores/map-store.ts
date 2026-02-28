@@ -13,6 +13,18 @@ export interface MilitaryBaseMarker {
   type: "usa" | "nato";
 }
 
+export interface FireDetectionMarker {
+  latitude: number;
+  longitude: number;
+  brightness: number;
+  frp: number;
+  confidence: "high" | "nominal" | "low";
+  acqDate: string;
+  acqTime: string;
+  daynight: string;
+  region: string;
+}
+
 interface MapState {
   viewport: MapViewport;
   showHeatmap: boolean;
@@ -25,6 +37,9 @@ interface MapState {
   entityLocations: EntityLocationMarker[];
   militaryBases: MilitaryBaseMarker[];
   militaryBasesLoading: boolean;
+  showFireDetections: boolean;
+  fireDetections: FireDetectionMarker[];
+  fireDetectionsLoading: boolean;
 
   setViewport: (viewport: Partial<MapViewport>) => void;
   flyTo: (longitude: number, latitude: number, zoom?: number) => void;
@@ -32,6 +47,9 @@ interface MapState {
   toggleClusters: () => void;
   toggleWatchboxes: () => void;
   toggleMilitaryBases: () => void;
+  toggleFireDetections: () => void;
+  setFireDetections: (fires: FireDetectionMarker[]) => void;
+  setFireDetectionsLoading: (loading: boolean) => void;
   startDrawingWatchbox: () => void;
   stopDrawingWatchbox: () => void;
   setActiveWatchbox: (id: string | null) => void;
@@ -63,6 +81,9 @@ export const useMapStore = create<MapState>((set) => ({
   entityLocations: [],
   militaryBases: [],
   militaryBasesLoading: false,
+  showFireDetections: true,
+  fireDetections: [],
+  fireDetectionsLoading: false,
 
   setViewport: (viewport) =>
     set((state) => ({
@@ -98,6 +119,15 @@ export const useMapStore = create<MapState>((set) => ({
     set((state) => ({
       showMilitaryBases: !state.showMilitaryBases,
     })),
+
+  toggleFireDetections: () =>
+    set((state) => ({
+      showFireDetections: !state.showFireDetections,
+    })),
+
+  setFireDetections: (fires) => set({ fireDetections: fires }),
+
+  setFireDetectionsLoading: (loading) => set({ fireDetectionsLoading: loading }),
 
   startDrawingWatchbox: () => set({ isDrawingWatchbox: true }),
 
