@@ -66,6 +66,7 @@ Visualize global military presence:
 - Node.js 18+
 - Mapbox account and API token
 - Valyu API key
+<img src="https://files.catbox.moe/n7fq4h.jpg" height="60">
 
 ### Installation
 
